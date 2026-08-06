@@ -99,7 +99,8 @@ st.markdown(
   border:1px solid var(--hairline) !important;
   border-radius:var(--panel-radius) !important;
   box-shadow:var(--shadow-lg) !important;
-  overflow:hidden;
+  overflow-y:auto !important;
+  max-height:calc(100vh - 2rem);
 }
 [data-testid="stMain"], .main{
   padding:1rem 1rem 1.2rem 1rem !important;
@@ -528,59 +529,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ---------------- Sidebar inputs -----------------------------------------
-with st.sidebar:
-    st.header("Inputs")
-    if st.button("Refresh data", help="Clear cached Snowflake queries"):
-        st.cache_data.clear()
-        st.rerun()
-
-    claim_type = st.radio("Claim type", ["TRX", "NBRX"], horizontal=True)
-
-    laad = load_laad()
-    qtrs = available_quarters(laad, claim_type)
-    if len(qtrs) < 2:
-        st.error("Not enough quarters in the source table.")
-        st.stop()
-
-    prev_qtr = st.selectbox("Previous quarter", qtrs, index=max(0, len(qtrs) - 3))
-    curr_qtr = st.selectbox("Current quarter", qtrs, index=len(qtrs) - 1)
-
-    if prev_qtr == curr_qtr:
-        st.warning("Pick two different quarters.")
-        st.stop()
-
-# ---------------- Compute waterfall --------------------------------------
-prev_metrics = slice_metrics(laad, prev_qtr, claim_type)
-curr_metrics = slice_metrics(laad, curr_qtr, claim_type)
-res = build_waterfall(prev_metrics, curr_metrics)
-
-try:
-    npa_df = npa_market_share_by_qtr(claim_type)
-    npa_prev = npa_df.loc[npa_df["QTR"] == prev_qtr, "NPA_MS"]
-    npa_curr = npa_df.loc[npa_df["QTR"] == curr_qtr, "NPA_MS"]
-    npa_available = not (npa_prev.empty or npa_curr.empty)
-except Exception as e:
-    npa_df = pd.DataFrame()
-    npa_available = False
-    npa_error = str(e)
-else:
-    npa_error = None
-
-npa_res = None
-if npa_available:
-    npa_res = rescale_to_npa(res, float(npa_prev.iloc[0]), float(npa_curr.iloc[0]))
-
-# ---------------- Header KPIs --------------------------------------------
-c1, c2 = st.columns(2)
-c1.metric(f"Previous MS ({prev_qtr})", f"{res.previous_ms*100:.2f}%")
-c2.metric(f"New MS ({curr_qtr})", f"{res.new_ms*100:.2f}%", f"{res.total_delta*100:+.2f}%")
-
-# ---------------- Tabs ----------------------------------------------------
-tab_laad, tab_npa, tab_qc = st.tabs(
-    ["LAAD waterfall", "NPA-scaled waterfall", "QC / Calculations"]
-)
-
+# ---------------- Notes / Business Rules content -------------------------
 HOW_TO_USE = (
     "This is a directional decomposition: we rebuild market share with one lever frozen "
     "at last quarter's level to isolate its effect, then repeat for each lever. "
@@ -612,19 +561,95 @@ WHY_SCALING = (
 )
 
 
-def _render_notes():
-    with st.expander("How to use this waterfall?", expanded=False):
+def _render_notes(expanded: bool = False):
+    with st.expander("How to use this waterfall?", expanded=expanded):
         st.markdown(HOW_TO_USE)
-    with st.expander("What is the \"Other reasons\" Category?", expanded=False):
+    with st.expander("What is the \"Other reasons\" Category?", expanded=expanded):
         st.markdown(OTHER_REASONS)
-    with st.expander("Why scaling?", expanded=False):
+    with st.expander("Why scaling?", expanded=expanded):
         st.markdown(WHY_SCALING)
 
-# Add Business Rules & Assumptions section to the sidebar
+
+# View state: "waterfall" (default) or "business_rules"
+if "view" not in st.session_state:
+    st.session_state["view"] = "waterfall"
+
+
+# ---------------- Sidebar inputs -----------------------------------------
 with st.sidebar:
+    st.header("Inputs")
+    if st.button("Refresh data", help="Clear cached Snowflake queries"):
+        st.cache_data.clear()
+        st.rerun()
+
+    claim_type = st.radio("Claim type", ["TRX", "NBRX"], horizontal=True)
+
+    laad = load_laad()
+    qtrs = available_quarters(laad, claim_type)
+    if len(qtrs) < 2:
+        st.error("Not enough quarters in the source table.")
+        st.stop()
+
+    prev_qtr = st.selectbox("Previous quarter", qtrs, index=max(0, len(qtrs) - 3))
+    curr_qtr = st.selectbox("Current quarter", qtrs, index=len(qtrs) - 1)
+
     st.markdown("<div style='margin-top:1rem'></div>", unsafe_allow_html=True)
-    st.header("Business Rules & Assumptions")
-    _render_notes()
+    if st.button(
+        "Business Rules & Assumptions",
+        key="open_business_rules",
+        use_container_width=True,
+        help="Open the methodology notes in the main pane",
+    ):
+        st.session_state["view"] = "business_rules"
+        st.rerun()
+
+    if prev_qtr == curr_qtr:
+        st.warning("Pick two different quarters.")
+        st.stop()
+
+# ---------------- Business Rules view (early return) ---------------------
+if st.session_state.get("view") == "business_rules":
+    if st.button("\u2190 Back to waterfall", key="back_to_waterfall"):
+        st.session_state["view"] = "waterfall"
+        st.rerun()
+    st.markdown("## Business Rules &amp; Assumptions")
+    st.caption(
+        "How the waterfall is built, what \"Other reasons\" means, and why the payer-level "
+        "impacts get scaled to match the all-market view."
+    )
+    _render_notes(expanded=True)
+    st.stop()
+
+# ---------------- Compute waterfall --------------------------------------
+prev_metrics = slice_metrics(laad, prev_qtr, claim_type)
+curr_metrics = slice_metrics(laad, curr_qtr, claim_type)
+res = build_waterfall(prev_metrics, curr_metrics)
+
+try:
+    npa_df = npa_market_share_by_qtr(claim_type)
+    npa_prev = npa_df.loc[npa_df["QTR"] == prev_qtr, "NPA_MS"]
+    npa_curr = npa_df.loc[npa_df["QTR"] == curr_qtr, "NPA_MS"]
+    npa_available = not (npa_prev.empty or npa_curr.empty)
+except Exception as e:
+    npa_df = pd.DataFrame()
+    npa_available = False
+    npa_error = str(e)
+else:
+    npa_error = None
+
+npa_res = None
+if npa_available:
+    npa_res = rescale_to_npa(res, float(npa_prev.iloc[0]), float(npa_curr.iloc[0]))
+
+# ---------------- Header KPIs --------------------------------------------
+c1, c2 = st.columns(2)
+c1.metric(f"Previous MS ({prev_qtr})", f"{res.previous_ms*100:.2f}%")
+c2.metric(f"New MS ({curr_qtr})", f"{res.new_ms*100:.2f}%", f"{res.total_delta*100:+.2f}%")
+
+# ---------------- Tabs ----------------------------------------------------
+tab_laad, tab_npa, tab_qc = st.tabs(
+    ["LAAD waterfall", "NPA-scaled waterfall", "QC / Calculations"]
+)
 
 with tab_laad:
     st.altair_chart(
