@@ -201,3 +201,79 @@ def payer_breakdown_waterfall(res: WaterfallResult, title: str) -> alt.Chart:
     )
     chart = (bars + text_layer).properties(title=title, height=500, width="container")
     return chart
+
+
+# ---------------- QoQ metric time series ---------------------------------
+_PCT_METRICS = {"WD_MARKET_SHARE", "PD_MARKET_SHARE", "FILL_RATE", "RJ_RATE", "RV_RATE"}
+_PAYER_COLORS = {
+    "Commercial": _NAVY_700,
+    "Medicaid":   _ACCENT,
+    "Medicare":   "#7C3AED",
+    "Others":     "#F59E0B",
+    "Overall":    _NAVY_900,
+}
+
+
+def qoq_metric_chart(
+    df: pd.DataFrame,
+    metric: str,
+    brand: str,
+    claim_type: str,
+    payers: list | None = None,
+    title: str | None = None,
+) -> alt.Chart:
+    """Quarter-over-quarter line chart of a single LAAD metric, one line per payer.
+
+    df is the long-format LAAD DataFrame with QTR, CLAIM_TYPE, BRAND, PAYER, METRIC, VALUE.
+    """
+    sub = df[
+        (df["CLAIM_TYPE"].str.upper() == claim_type.upper())
+        & (df["BRAND"] == brand)
+        & (df["METRIC"] == metric)
+    ].copy()
+    if payers:
+        sub = sub[sub["PAYER"].isin(payers)]
+    sub = sub.sort_values(["QTR", "PAYER"])
+
+    is_pct = metric.upper() in _PCT_METRICS
+    y_axis = alt.Axis(format=".1%" if is_pct else ",.0f", title=metric)
+    y_scale = alt.Scale(zero=False, nice=True)
+    tooltip_val = alt.Tooltip("VALUE:Q", title=metric, format=(".2%" if is_pct else ",.0f"))
+
+    present_payers = list(sub["PAYER"].unique())
+    palette = [_PAYER_COLORS.get(p, _NAVY_700) for p in present_payers]
+
+    lines = alt.Chart(sub).mark_line(
+        strokeWidth=2.4, interpolate="monotone",
+    ).encode(
+        x=alt.X("QTR:N", sort=None, title=None, axis=alt.Axis(labelAngle=-25)),
+        y=alt.Y("VALUE:Q", axis=y_axis, scale=y_scale),
+        color=alt.Color(
+            "PAYER:N",
+            scale=alt.Scale(domain=present_payers, range=palette),
+            legend=alt.Legend(title="Payer", orient="top", direction="horizontal"),
+        ),
+        tooltip=[
+            alt.Tooltip("QTR:N", title="Quarter"),
+            alt.Tooltip("PAYER:N", title="Payer"),
+            tooltip_val,
+        ],
+    )
+    points = alt.Chart(sub).mark_point(
+        size=70, filled=True, strokeWidth=0,
+    ).encode(
+        x=alt.X("QTR:N", sort=None),
+        y=alt.Y("VALUE:Q", scale=y_scale),
+        color=alt.Color("PAYER:N", scale=alt.Scale(domain=present_payers, range=palette), legend=None),
+        tooltip=[
+            alt.Tooltip("QTR:N", title="Quarter"),
+            alt.Tooltip("PAYER:N", title="Payer"),
+            tooltip_val,
+        ],
+    )
+    chart = (lines + points).properties(
+        title=title or f"{brand} - {metric} ({claim_type})",
+        height=420,
+        width="container",
+    )
+    return chart

@@ -18,7 +18,7 @@ from src.data import (
     slice_metrics,
 )
 from src.waterfall import build_waterfall, rescale_to_npa, PAYERS, WaterfallResult
-from src.charts import overall_waterfall, payer_breakdown_waterfall
+from src.charts import overall_waterfall, payer_breakdown_waterfall, qoq_metric_chart
 from src.qc import build_qc, LeverQCTables
 
 
@@ -744,8 +744,8 @@ c1.metric(f"Previous MS ({prev_qtr})", f"{res.previous_ms*100:.2f}%")
 c2.metric(f"New MS ({curr_qtr})", f"{res.new_ms*100:.2f}%", f"{res.total_delta*100:+.2f}%")
 
 # ---------------- Tabs ----------------------------------------------------
-tab_npa, tab_laad = st.tabs(
-    ["NPA-scaled waterfall", "LAAD waterfall"]
+tab_npa, tab_laad, tab_qoq = st.tabs(
+    ["NPA-scaled waterfall", "LAAD waterfall", "QoQ Metrics"]
 )
 
 with tab_laad:
@@ -770,3 +770,63 @@ with tab_npa:
             overall_waterfall(npa_res, f"{claim_type} NPA-scaled waterfall -- {prev_qtr} to {curr_qtr}"),
             use_container_width=True,
         )
+
+with tab_qoq:
+    # Metric label -> raw METRIC value in the LAAD table
+    _METRIC_OPTIONS = {
+        "Written Demand (WD)": "WD",
+        "Written Demand market share": "WD_MARKET_SHARE",
+        "Paid claims (PD_CLAIMS)": "PD_CLAIMS",
+        "Paid claims market share": "PD_MARKET_SHARE",
+        "Fill rate": "FILL_RATE",
+        "Rejection rate": "RJ_RATE",
+        "Reversal rate": "RV_RATE",
+    }
+    available_metric_codes = set(laad["METRIC"].unique())
+    metric_labels = [label for label, code in _METRIC_OPTIONS.items() if code in available_metric_codes]
+    if not metric_labels:
+        st.warning("No metrics available in the LAAD dataset.")
+    else:
+        col_a, col_b = st.columns([2, 1])
+        with col_a:
+            metric_label = st.selectbox(
+                "Metric",
+                metric_labels,
+                key="qoq_metric",
+                help="Pick a metric to track quarter-over-quarter across payers.",
+            )
+        brands_present = [b for b in ["Nurtec", "Abbvie", "Overall"] if b in set(laad["BRAND"].unique())]
+        with col_b:
+            brand = st.selectbox(
+                "Brand",
+                brands_present,
+                index=0 if "Nurtec" not in brands_present else brands_present.index("Nurtec"),
+                key="qoq_brand",
+            )
+
+        payer_options = [p for p in ["Overall", "Commercial", "Medicaid", "Medicare", "Others"]
+                         if p in set(laad["PAYER"].unique())]
+        default_payers = [p for p in payer_options if p != "Overall"] or payer_options
+        selected_payers = st.multiselect(
+            "Payers to plot",
+            payer_options,
+            default=default_payers,
+            key="qoq_payers",
+            help="Choose which payer lines appear on the chart.",
+        )
+
+        metric_code = _METRIC_OPTIONS[metric_label]
+        if selected_payers:
+            st.altair_chart(
+                qoq_metric_chart(
+                    laad,
+                    metric=metric_code,
+                    brand=brand,
+                    claim_type=claim_type,
+                    payers=selected_payers,
+                    title=f"{brand} - {metric_label} - {claim_type} - quarter over quarter",
+                ),
+                use_container_width=True,
+            )
+        else:
+            st.info("Select at least one payer to plot.")
