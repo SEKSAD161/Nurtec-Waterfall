@@ -26,7 +26,7 @@ def excel_style_table(r: WaterfallResult, include_other: bool = True) -> pd.Data
     """Build the Excel-style waterfall table.
 
     Layout mirrors the workbook's TRx Waterfall / NBRx Waterfall tab.
-    All contribution values are shown in percentage-points (pp);
+    All contribution values are shown as percent (%);
     market share rows are shown as %.
     """
     rows = []
@@ -36,17 +36,17 @@ def excel_style_table(r: WaterfallResult, include_other: bool = True) -> pd.Data
         ("Level 2 - Rejections", r.rj),
         ("Level 3 - Reversals", r.rv),
     ]:
-        rows.append((name, lever.overall_impact * 100, "pp"))
+        rows.append((name, lever.overall_impact * 100, "%"))
         for payer in PAYERS:
-            rows.append((f"  {payer}", lever.payer_impacts_scaled.get(payer, 0.0) * 100, "pp"))
+            rows.append((f"  {payer}", lever.payer_impacts_scaled.get(payer, 0.0) * 100, "%"))
     if include_other:
-        rows.append(("Other reasons", r.other * 100, "pp"))
+        rows.append(("Other reasons", r.other * 100, "%"))
     rows.append(("New market share", r.new_ms * 100, "%"))
-    rows.append(("Total MS difference", r.total_delta * 100, "pp"))
+    rows.append(("Total MS difference", r.total_delta * 100, "%"))
 
     df = pd.DataFrame(rows, columns=["Waterfall step", "Contribution", "Unit"])
     df["Contribution"] = df.apply(
-        lambda x: f"{x['Contribution']:.4f}%" if x["Unit"] == "%" else f"{x['Contribution']:+.4f} pp",
+        lambda x: f"{x['Contribution']:.4f}%",
         axis=1,
     )
     return df[["Waterfall step", "Contribution"]]
@@ -363,9 +363,13 @@ p, .stMarkdown p, [data-testid="stCaptionContainer"], [data-testid="stCaptionCon
   -webkit-backdrop-filter:blur(8px);
   border:1px solid var(--hairline-2);
   border-radius:12px;
-  padding:0.9rem 1.1rem 0.85rem;
+  padding:0.95rem 1.15rem 0.9rem;
   box-shadow:var(--shadow-sm);
+  min-height:118px;
+  height:100%;
+  display:flex;flex-direction:column;justify-content:center;
   transition:transform 0.25s var(--ease-out),box-shadow 0.25s var(--ease);
+  overflow:hidden;
 }
 [data-testid="stMetric"]:hover{
   transform:translateY(-1px);
@@ -375,17 +379,36 @@ p, .stMarkdown p, [data-testid="stCaptionContainer"], [data-testid="stCaptionCon
   font-size:0.7rem !important;font-weight:600 !important;
   text-transform:uppercase;letter-spacing:0.06em;
   color:var(--text-muted) !important;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
 [data-testid="stMetricValue"]{
   font-family:'Manrope',sans-serif !important;
-  font-size:1.55rem !important;font-weight:700 !important;
+  font-size:1.5rem !important;font-weight:700 !important;
+  line-height:1.15 !important;
   color:var(--navy-900) !important;
   font-variant-numeric:tabular-nums;
   letter-spacing:-0.02em;
+  white-space:nowrap;
 }
+[data-testid="stMetricValue"] > div{ white-space:nowrap !important; }
 [data-testid="stMetricDelta"]{
   font-size:0.75rem !important;font-weight:600 !important;
   font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+
+/* Non-collapsible sidebar — hide the collapse toggles */
+[data-testid="collapsedControl"],
+[data-testid="stSidebarCollapseButton"],
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="stSidebarNav"] button[kind="header"]{
+  display:none !important;
+}
+[data-testid="stSidebar"]{
+  min-width:280px !important;
+  max-width:340px !important;
+  transform:none !important;
+  visibility:visible !important;
 }
 
 /* Subheaders */
@@ -551,9 +574,9 @@ if npa_available:
 # ---------------- Header KPIs --------------------------------------------
 c1, c2, c3, c4 = st.columns(4)
 c1.metric(f"Previous MS ({prev_qtr})", f"{res.previous_ms*100:.2f}%")
-c2.metric(f"New MS ({curr_qtr})", f"{res.new_ms*100:.2f}%", f"{res.total_delta*100:+.2f} pp")
-c3.metric("Level 1 - WD", f"{res.wd.overall_impact*100:+.3f} pp")
-c4.metric("Level 2 - Rejections", f"{res.rj.overall_impact*100:+.3f} pp")
+c2.metric(f"New MS ({curr_qtr})", f"{res.new_ms*100:.2f}%", f"{res.total_delta*100:+.2f}%")
+c3.metric("Level 1 - WD", f"{res.wd.overall_impact*100:+.3f}%")
+c4.metric("Level 2 - Rejections", f"{res.rj.overall_impact*100:+.3f}%")
 
 # ---------------- Tabs ----------------------------------------------------
 tab_laad, tab_npa, tab_qc, tab_data = st.tabs(
@@ -610,7 +633,7 @@ with tab_laad:
             payer_breakdown_waterfall(res, f"{claim_type} LAAD -- payer breakdown"),
             use_container_width=True,
         )
-    st.subheader("Lever & payer impacts (LAAD, pp)")
+    st.subheader("Lever & payer impacts (LAAD, %)")
     df_impacts = pd.DataFrame(
         {
             "L1 WD (scaled)": [res.wd.payer_impacts_scaled[p] for p in PAYERS] + [res.wd.overall_impact],
@@ -619,7 +642,7 @@ with tab_laad:
         },
         index=PAYERS + ["Overall"],
     ) * 100
-    st.dataframe(df_impacts.style.format("{:+.4f} pp"), use_container_width=True)
+    st.dataframe(df_impacts.style.format("{:+.4f}%"), use_container_width=True)
 
     st.subheader("Excel-style waterfall table (LAAD)")
     st.dataframe(excel_style_table(res, include_other=True), use_container_width=True, hide_index=True)
@@ -634,7 +657,7 @@ with tab_npa:
         _render_notes()
         c1, c2, c3 = st.columns(3)
         c1.metric(f"NPA prev ({prev_qtr})", f"{npa_res.previous_ms*100:.2f}%")
-        c2.metric(f"NPA curr ({curr_qtr})", f"{npa_res.new_ms*100:.2f}%", f"{npa_res.total_delta*100:+.2f} pp")
+        c2.metric(f"NPA curr ({curr_qtr})", f"{npa_res.new_ms*100:.2f}%", f"{npa_res.total_delta*100:+.2f}%")
         c3.metric("LAAD to NPA factor", f"{npa_res.debug['laad_to_npa_factor']:.3f}")
 
         st.altair_chart(
@@ -646,7 +669,7 @@ with tab_npa:
                 payer_breakdown_waterfall(npa_res, f"{claim_type} NPA -- payer breakdown"),
                 use_container_width=True,
             )
-        st.subheader("Lever & payer impacts (NPA-scaled, pp)")
+        st.subheader("Lever & payer impacts (NPA-scaled, %)")
         df_npa = pd.DataFrame(
             {
                 "L1 WD": [npa_res.wd.payer_impacts_scaled[p] for p in PAYERS] + [npa_res.wd.overall_impact],
@@ -655,7 +678,7 @@ with tab_npa:
             },
             index=PAYERS + ["Overall"],
         ) * 100
-        st.dataframe(df_npa.style.format("{:+.4f} pp"), use_container_width=True)
+        st.dataframe(df_npa.style.format("{:+.4f}%"), use_container_width=True)
 
         st.subheader("Excel-style waterfall table (NPA-scaled)")
         st.dataframe(excel_style_table(npa_res, include_other=False), use_container_width=True, hide_index=True)
@@ -699,7 +722,7 @@ with tab_qc:
             if row["Metric"] == "Volume Difference":
                 return f"{v:+,.2f}"
             if row["Metric"] == "Market Share impact":
-                return f"{v*100:+.4f} pp"
+                return f"{v*100:+.4f}%"
             return str(v)
         out = df.copy()
         out["Actual (raw)"] = df.apply(lambda r: _cell(r, "Actual (raw)"), axis=1)
@@ -714,8 +737,8 @@ with tab_qc:
         st.dataframe(_fmt_inputs(qc.overall_inputs_df), use_container_width=True, hide_index=True)
 
         k1, k2, k3 = st.columns(3)
-        k1.metric("Overall Impact", f"{qc.overall_impact*100:+.4f} pp")
-        k2.metric("Sum of payer raw impact", f"{qc.sum_payer_raw*100:+.4f} pp")
+        k1.metric("Overall Impact", f"{qc.overall_impact*100:+.4f}%")
+        k2.metric("Sum of payer raw impact", f"{qc.sum_payer_raw*100:+.4f}%")
         k3.metric("Scaling factor", f"{qc.scaling_factor:.4f}")
 
         st.markdown("**Payer-level detail**")
@@ -724,8 +747,8 @@ with tab_qc:
                 st.dataframe(_fmt_inputs(pt.inputs_df), use_container_width=True, hide_index=True)
                 st.dataframe(_fmt_metrics(pt.metrics_df), use_container_width=True, hide_index=True)
                 st.caption(
-                    f"Difference/Impact -- Raw: {pt.impact_raw*100:+.4f} pp   |   "
-                    f"Scaled up: {pt.impact_scaled*100:+.4f} pp"
+                    f"Difference/Impact -- Raw: {pt.impact_raw*100:+.4f}%   |   "
+                    f"Scaled up: {pt.impact_scaled*100:+.4f}%"
                 )
         st.markdown("---")
 
