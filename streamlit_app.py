@@ -521,7 +521,7 @@ st.markdown(
 <div class="hero">
   <div class="hero-title">Nurtec QoQ NBRx &amp; TRx Waterfall</div>
   <div class="hero-subtitle">
-    <span class="chip">Primary Care Analytics</span>
+    <span class="chip">Objective</span>
     <span>Decomposes Nurtec's LAAD market-share change into Written Demand / Rejections / Reversals levers with payer-level breakdown, and rescales to NPA (real-world) market share.</span>
   </div>
 </div>
@@ -577,6 +577,15 @@ if "view" not in st.session_state:
 
 # ---------------- Sidebar inputs -----------------------------------------
 with st.sidebar:
+    st.markdown(
+        """
+<div style="display:flex;justify-content:center;padding:0.4rem 0 1rem;">
+  <img src="https://cdn.pfizer.com/pfizercom/2022-10/Pfizer_Logo_Color_CMYK.png"
+       alt="Pfizer" style="max-width:140px;height:auto;display:block;" />
+</div>
+        """,
+        unsafe_allow_html=True,
+    )
     st.header("Inputs")
 
     claim_type = st.radio("Claim type", ["TRX", "NBRX"], horizontal=True)
