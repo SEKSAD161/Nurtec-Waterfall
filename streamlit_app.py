@@ -582,9 +582,15 @@ with st.sidebar:
     claim_type = st.radio("Claim type", ["TRX", "NBRX"], horizontal=True)
 
     laad = load_laad()
-    qtrs = available_quarters(laad, claim_type)
+    qtrs_laad = available_quarters(laad, claim_type)
+    try:
+        _npa_all = npa_market_share_by_qtr(claim_type)
+        qtrs_npa = set(_npa_all["QTR"].tolist()) if not _npa_all.empty else set()
+    except Exception:
+        qtrs_npa = set()
+    qtrs = sorted(set(qtrs_laad) & qtrs_npa) if qtrs_npa else sorted(qtrs_laad)
     if len(qtrs) < 2:
-        st.error("Not enough quarters in the source table.")
+        st.error("Not enough quarters with both LAAD and NPA data.")
         st.stop()
 
     prev_qtr = st.selectbox("Previous quarter", qtrs, index=max(0, len(qtrs) - 3))
@@ -729,8 +735,8 @@ c1.metric(f"Previous MS ({prev_qtr})", f"{res.previous_ms*100:.2f}%")
 c2.metric(f"New MS ({curr_qtr})", f"{res.new_ms*100:.2f}%", f"{res.total_delta*100:+.2f}%")
 
 # ---------------- Tabs ----------------------------------------------------
-tab_laad, tab_npa = st.tabs(
-    ["LAAD waterfall", "NPA-scaled waterfall"]
+tab_npa, tab_laad = st.tabs(
+    ["NPA-scaled waterfall", "LAAD waterfall"]
 )
 
 with tab_laad:
