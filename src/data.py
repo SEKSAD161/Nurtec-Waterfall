@@ -10,11 +10,15 @@ Two sources:
 
 Loading strategy
 ----------------
-Both sources try `data/laad.csv` / `data/npa.csv` (bundled with the repo) first.
-If the file exists, we load it -- no Snowflake connection required. If not, we
-fall back to Snowflake via `st.connection("snowflake")`. The Snowflake path is
-lazy-imported so environments without `snowflake-snowpark-python` (e.g. Dataiku
-without the connector installed) can still run the app off the bundled CSVs.
+Each source tries three loaders in order and uses the first one that works:
+
+  1. Dataiku Dataset API (`dataiku.Dataset(name).get_dataframe()`).
+     LAAD dataset name defaults to `SQL_NURTEC_WATERFALL_QTR_METRICS`, override
+     with env var `DKU_LAAD_DATASET`. NPA is skipped by default because there
+     is no equivalent Dataiku dataset today; set `DKU_NPA_DATASET` to opt in.
+  2. Bundled CSV under `data/laad.csv` / `data/npa.csv`.
+  3. Snowflake via `st.connection("snowflake")` (lazy import, so environments
+     without `snowflake-snowpark-python` won't fail at module load).
 """
 from __future__ import annotations
 
@@ -31,12 +35,30 @@ _DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 _LAAD_CSV = _DATA_DIR / "laad.csv"
 _NPA_CSV = _DATA_DIR / "npa.csv"
 
+_DKU_LAAD_DATASET = os.getenv("DKU_LAAD_DATASET", "SQL_NURTEC_WATERFALL_QTR_METRICS")
+_DKU_NPA_DATASET = os.getenv("DKU_NPA_DATASET")  # None by default; opt-in
+
+
+def _try_dataiku(dataset_name: str | None) -> pd.DataFrame | None:
+    """Load a Dataiku Dataset by name. Returns None if Dataiku or the dataset
+    isn't available in this environment."""
+    if not dataset_name:
+        return None
+    try:
+        import dataiku  # type: ignore
+    except Exception:
+        return None
+    try:
+        return dataiku.Dataset(dataset_name).get_dataframe()
+    except Exception:
+        return None
+
 
 def _get_session():
     """Lazy: return a Snowpark session via st.connection.
 
-    Only invoked when the bundled CSVs are missing, so environments without the
-    Snowflake connector installed never trip the import.
+    Only invoked when Dataiku + CSV loaders both miss, so environments without
+    the Snowflake connector installed never trip the import.
     """
     conn = st.connection("snowflake", ttl=os.getenv("SNOWFLAKE_CONNECTION_TTL"))
     return conn.session()
@@ -44,35 +66,47 @@ def _get_session():
 
 @st.cache_data(ttl=3600, show_spinner="Loading LAAD waterfall metrics...")
 def load_laad() -> pd.DataFrame:
-    if _LAAD_CSV.exists():
-        df = pd.read_csv(_LAAD_CSV)
-    else:
-        session = _get_session()
-        df = session.sql(
-            f"SELECT QTR, CLAIM_TYPE, BRAND, PAYER, METRIC, VALUE FROM {LAAD_TABLE}"
-        ).to_pandas()
+    df = _try_dataiku(_DKU_LAAD_DATASET)
+    if df is None:
+        if _LAAD_CSV.exists():
+            df = pd.read_csv(_LAAD_CSV)
+        else:
+            session = _get_session()
+            df = session.sql(
+                f"SELECT QTR, CLAIM_TYPE, BRAND, PAYER, METRIC, VALUE FROM {LAAD_TABLE}"
+            ).to_pandas()
     df.columns = [c.upper() for c in df.columns]
     return df
 
 
 @st.cache_data(ttl=3600, show_spinner="Loading NPA metrics...")
 def load_npa_monthly() -> pd.DataFrame:
-    if _NPA_CSV.exists():
-        df = pd.read_csv(_NPA_CSV)
-    else:
-        session = _get_session()
-        df = session.sql(
-            f"""
-            SELECT DATE, PRODUCT_NAME, METRIC, METRIC_VALUE
-            FROM {NPA_TABLE}
-            WHERE SOURCE = 'NPA'
-              AND MARKET_CLASS = 'TOTAL'
-              AND METRIC IN ('TRx','NRx','OCGRP_TRx','OCGRP_NRx')
-            """
-        ).to_pandas()
+    df = _try_dataiku(_DKU_NPA_DATASET)
+    if df is None:
+        if _NPA_CSV.exists():
+            df = pd.read_csv(_NPA_CSV)
+        else:
+            session = _get_session()
+            df = session.sql(
+                f"""
+                SELECT DATE, PRODUCT_NAME, METRIC, METRIC_VALUE
+                FROM {NPA_TABLE}
+                WHERE SOURCE = 'NPA'
+                  AND MARKET_CLASS = 'TOTAL'
+                  AND METRIC IN ('TRx','NRx','OCGRP_TRx','OCGRP_NRx')
+                """
+            ).to_pandas()
     df.columns = [c.upper() for c in df.columns]
     df["DATE"] = pd.to_datetime(df["DATE"])
     df["QTR"] = df["DATE"].dt.to_period("Q").astype(str)
+    # If we pulled the raw NPA dataset from Dataiku, apply the same filter used
+    # in the Snowflake query so downstream aggregation matches.
+    if "SOURCE" in df.columns and "MARKET_CLASS" in df.columns:
+        df = df[
+            (df["SOURCE"] == "NPA")
+            & (df["MARKET_CLASS"] == "TOTAL")
+            & (df["METRIC"].isin(["TRx", "NRx", "OCGRP_TRx", "OCGRP_NRx"]))
+        ].reset_index(drop=True)
     return df
 
 
