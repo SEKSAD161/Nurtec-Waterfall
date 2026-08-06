@@ -602,6 +602,14 @@ with st.sidebar:
     ):
         st.session_state["view"] = "business_rules"
         st.rerun()
+    if st.button(
+        "Calculations",
+        key="open_calculations",
+        use_container_width=True,
+        help="Open the QC / calculation walk-through in the main pane",
+    ):
+        st.session_state["view"] = "calculations"
+        st.rerun()
 
     if prev_qtr == curr_qtr:
         st.warning("Pick two different quarters.")
@@ -641,14 +649,91 @@ npa_res = None
 if npa_available:
     npa_res = rescale_to_npa(res, float(npa_prev.iloc[0]), float(npa_curr.iloc[0]))
 
+# ---------------- Calculations view (early return) -----------------------
+if st.session_state.get("view") == "calculations":
+    if st.button("\u2190 Back to waterfall", key="back_to_waterfall_from_calc"):
+        st.session_state["view"] = "waterfall"
+        st.rerun()
+    st.markdown("## Calculations")
+    st.subheader(f"Calculation walk-through -- {claim_type}, {prev_qtr} \u2192 {curr_qtr}")
+    st.caption(
+        "Layout mirrors the workbook's TRx Waterfall / NBRx Waterfall tab (rows 36-130). "
+        "Same formulas Excel uses, so you can cross-check any cell."
+    )
+
+    def _pct_cols(df: pd.DataFrame) -> list:
+        return [c for c in df.columns if any(k in c for k in ("Mkt share", "Fill Rate", "RJ Rate", "RV Rate"))]
+
+    def _int_cols(df: pd.DataFrame) -> list:
+        return [c for c in df.columns
+                if c in ("Oral CGRP WD", "Oral CGRP PD", "Oral CGRP PD Claims",
+                         "OCGRP PD", "Nurtec WD",
+                         "Nurtec Ideal PD", "Abbvie Ideal PD")]
+
+    def _fmt_inputs(df: pd.DataFrame):
+        fmt = {}
+        for c in _pct_cols(df):
+            fmt[c] = "{:.4%}"
+        for c in _int_cols(df):
+            fmt[c] = "{:,.0f}"
+        if "Ideal Nurtec PD Mkt Share" in df.columns:
+            fmt["Ideal Nurtec PD Mkt Share"] = "{:.4%}"
+        return df.style.format(fmt, na_rep="\u2014")
+
+    def _fmt_metrics(df: pd.DataFrame):
+        def _cell(row, col):
+            v = row[col]
+            if v is None or pd.isna(v):
+                return "\u2014"
+            if row["Metric"] in ("Nurtec Ideal PD", "Nurtec Actual PD"):
+                return f"{v:,.2f}"
+            if row["Metric"] == "Volume Difference":
+                return f"{v:+,.2f}"
+            if row["Metric"] == "Market Share impact":
+                return f"{v*100:+.4f}%"
+            return str(v)
+        out = df.copy()
+        out["Actual (raw)"] = df.apply(lambda r: _cell(r, "Actual (raw)"), axis=1)
+        out["Scaled up"] = df.apply(lambda r: _cell(r, "Scaled up"), axis=1)
+        return out
+
+    def render_lever(qc_l: LeverQCTables):
+        st.markdown(f"### {qc_l.lever_name}")
+        st.caption(qc_l.assumption)
+
+        st.markdown("**Overall calculation**")
+        st.dataframe(_fmt_inputs(qc_l.overall_inputs_df), use_container_width=True, hide_index=True)
+
+        k1, k2, k3 = st.columns(3)
+        k1.metric("Overall Impact", f"{qc_l.overall_impact*100:+.4f}%")
+        k2.metric("Sum of payer raw impact", f"{qc_l.sum_payer_raw*100:+.4f}%")
+        k3.metric("Scaling factor", f"{qc_l.scaling_factor:.4f}")
+
+        st.markdown("**Payer-level detail**")
+        for pt in qc_l.payer_tables:
+            with st.expander(f"{pt.heading}", expanded=False):
+                st.dataframe(_fmt_inputs(pt.inputs_df), use_container_width=True, hide_index=True)
+                st.dataframe(_fmt_metrics(pt.metrics_df), use_container_width=True, hide_index=True)
+                st.caption(
+                    f"Difference/Impact -- Raw: {pt.impact_raw*100:+.4f}%   |   "
+                    f"Scaled up: {pt.impact_scaled*100:+.4f}%"
+                )
+        st.markdown("---")
+
+    qc = build_qc(prev_metrics, curr_metrics, res, prev_qtr, curr_qtr)
+    render_lever(qc["L1"])
+    render_lever(qc["L2"])
+    render_lever(qc["L3"])
+    st.stop()
+
 # ---------------- Header KPIs --------------------------------------------
 c1, c2 = st.columns(2)
 c1.metric(f"Previous MS ({prev_qtr})", f"{res.previous_ms*100:.2f}%")
 c2.metric(f"New MS ({curr_qtr})", f"{res.new_ms*100:.2f}%", f"{res.total_delta*100:+.2f}%")
 
 # ---------------- Tabs ----------------------------------------------------
-tab_laad, tab_npa, tab_qc = st.tabs(
-    ["LAAD waterfall", "NPA-scaled waterfall", "QC / Calculations"]
+tab_laad, tab_npa = st.tabs(
+    ["LAAD waterfall", "NPA-scaled waterfall"]
 )
 
 with tab_laad:
@@ -709,80 +794,6 @@ with tab_npa:
 
         st.subheader("Excel-style waterfall table (NPA-scaled)")
         st.dataframe(excel_style_table(npa_res, include_other=False), use_container_width=True, hide_index=True)
-
-with tab_qc:
-    st.subheader(f"Calculation walk-through -- {claim_type}, {prev_qtr} \u2192 {curr_qtr}")
-    st.caption(
-        "Layout mirrors the workbook's TRx Waterfall / NBRx Waterfall tab (rows 36-130). "
-        "Same formulas Excel uses, so you can cross-check any cell."
-    )
-
-    def _pct_cols(df: pd.DataFrame) -> list:
-        return [c for c in df.columns if any(k in c for k in ("Mkt share", "Fill Rate", "RJ Rate", "RV Rate"))]
-
-    def _int_cols(df: pd.DataFrame) -> list:
-        return [c for c in df.columns
-                if c in ("Oral CGRP WD", "Oral CGRP PD", "Oral CGRP PD Claims",
-                         "OCGRP PD", "Nurtec WD",
-                         "Nurtec Ideal PD", "Abbvie Ideal PD")]
-
-    def _fmt_inputs(df: pd.DataFrame):
-        fmt = {}
-        for c in _pct_cols(df):
-            fmt[c] = "{:.4%}"
-        for c in _int_cols(df):
-            fmt[c] = "{:,.0f}"
-        if "Ideal Nurtec PD Mkt Share" in df.columns:
-            fmt["Ideal Nurtec PD Mkt Share"] = "{:.4%}"
-        return df.style.format(fmt, na_rep="\u2014")
-
-    def _fmt_metrics(df: pd.DataFrame):
-        def raw(x):
-            m = df.loc[df["Metric"] == x, "Actual (raw)"]
-            return m.iloc[0] if not m.empty else None
-        def _cell(row, col):
-            v = row[col]
-            if v is None or pd.isna(v):
-                return "\u2014"
-            if row["Metric"] in ("Nurtec Ideal PD", "Nurtec Actual PD"):
-                return f"{v:,.2f}"
-            if row["Metric"] == "Volume Difference":
-                return f"{v:+,.2f}"
-            if row["Metric"] == "Market Share impact":
-                return f"{v*100:+.4f}%"
-            return str(v)
-        out = df.copy()
-        out["Actual (raw)"] = df.apply(lambda r: _cell(r, "Actual (raw)"), axis=1)
-        out["Scaled up"] = df.apply(lambda r: _cell(r, "Scaled up"), axis=1)
-        return out
-
-    def render_lever(qc: LeverQCTables):
-        st.markdown(f"### {qc.lever_name}")
-        st.caption(qc.assumption)
-
-        st.markdown("**Overall calculation**")
-        st.dataframe(_fmt_inputs(qc.overall_inputs_df), use_container_width=True, hide_index=True)
-
-        k1, k2, k3 = st.columns(3)
-        k1.metric("Overall Impact", f"{qc.overall_impact*100:+.4f}%")
-        k2.metric("Sum of payer raw impact", f"{qc.sum_payer_raw*100:+.4f}%")
-        k3.metric("Scaling factor", f"{qc.scaling_factor:.4f}")
-
-        st.markdown("**Payer-level detail**")
-        for pt in qc.payer_tables:
-            with st.expander(f"{pt.heading}", expanded=False):
-                st.dataframe(_fmt_inputs(pt.inputs_df), use_container_width=True, hide_index=True)
-                st.dataframe(_fmt_metrics(pt.metrics_df), use_container_width=True, hide_index=True)
-                st.caption(
-                    f"Difference/Impact -- Raw: {pt.impact_raw*100:+.4f}%   |   "
-                    f"Scaled up: {pt.impact_scaled*100:+.4f}%"
-                )
-        st.markdown("---")
-
-    qc = build_qc(prev_metrics, curr_metrics, res, prev_qtr, curr_qtr)
-    render_lever(qc["L1"])
-    render_lever(qc["L2"])
-    render_lever(qc["L3"])
 
 st.caption(
     "LAAD source: VAW_AMER_DESIGN.USPRIMARYCAREADHOCANALYTICSPARTC.USPRIMARYCAREADHOCANALYTICSPARTC_SQL_NURTEC_WATERFALL_QTR_METRICS  |  "
