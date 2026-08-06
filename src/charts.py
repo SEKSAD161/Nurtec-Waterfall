@@ -93,7 +93,7 @@ def _build_waterfall_df(labels: list, measures: list, values: list) -> pd.DataFr
         text = (
             f"{value*100:.2f}%"
             if measure in ("absolute", "total")
-            else f"{value*100:+.3f}%"
+            else f"{value*100:+.2f}%"
         )
         rows.append({
             "label": label,
@@ -102,8 +102,27 @@ def _build_waterfall_df(labels: list, measures: list, values: list) -> pd.DataFr
             "color": color,
             "text": text,
             "order": i,
+            "measure": measure,
         })
     return pd.DataFrame(rows)
+
+
+def _zoomed_y_domain(df: pd.DataFrame, pad_frac: float = 0.15) -> list:
+    """Compute a y-domain that ignores the trivial 0 start of anchor bars, so
+    the mid-range lever bars are visible instead of being crushed by a full
+    0-to-max scale. Adds a small proportional padding on each side.
+    """
+    anchor = df["measure"].isin(["absolute", "total"])
+    # Points we actually care about visually:
+    pts = pd.concat([
+        df.loc[~anchor, "start"],
+        df.loc[~anchor, "end"],
+        df.loc[anchor, "end"],
+    ])
+    lo, hi = float(pts.min()), float(pts.max())
+    span = max(hi - lo, 1e-4)
+    pad = span * pad_frac
+    return [max(lo - pad, 0.0), hi + pad]
 
 
 def overall_waterfall(res: WaterfallResult, title: str) -> alt.Chart:
@@ -118,10 +137,14 @@ def overall_waterfall(res: WaterfallResult, title: str) -> alt.Chart:
         res.new_ms,
     ]
     df = _build_waterfall_df(labels, measures, values)
+    y_domain = _zoomed_y_domain(df)
 
     bars = alt.Chart(df).mark_bar(size=44, cornerRadius=4).encode(
-        x=alt.X("label:N", sort=alt.EncodingSortField(field="order"), title=None),
-        y=alt.Y("start:Q", title="Market Share", axis=alt.Axis(format=".1%")),
+        x=alt.X("label:N", sort=alt.EncodingSortField(field="order"), title=None,
+                axis=alt.Axis(labelAngle=-25, labelLimit=200)),
+        y=alt.Y("start:Q", title="Market Share",
+                axis=alt.Axis(format=".1%"),
+                scale=alt.Scale(zero=False, domain=y_domain, nice=False, clamp=True)),
         y2="end:Q",
         color=alt.Color("color:N", scale=None),
         tooltip=[
@@ -133,10 +156,11 @@ def overall_waterfall(res: WaterfallResult, title: str) -> alt.Chart:
         dy=-10, fontSize=11, font="Inter", fontWeight=600, color=_NAVY_900,
     ).encode(
         x=alt.X("label:N", sort=alt.EncodingSortField(field="order")),
-        y=alt.Y("end:Q"),
+        y=alt.Y("end:Q",
+                scale=alt.Scale(zero=False, domain=y_domain, nice=False, clamp=True)),
         text="text:N",
     )
-    chart = (bars + text_layer).properties(title=title, height=420, width="container")
+    chart = (bars + text_layer).properties(title=title, height=440, width="container")
     return chart
 
 

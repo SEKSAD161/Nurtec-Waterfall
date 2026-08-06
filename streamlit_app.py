@@ -46,7 +46,7 @@ def excel_style_table(r: WaterfallResult, include_other: bool = True) -> pd.Data
 
     df = pd.DataFrame(rows, columns=["Waterfall step", "Contribution", "Unit"])
     df["Contribution"] = df.apply(
-        lambda x: f"{x['Contribution']:.4f}%",
+        lambda x: f"{x['Contribution']:.2f}%",
         axis=1,
     )
     return df[["Waterfall step", "Contribution"]]
@@ -578,9 +578,6 @@ if "view" not in st.session_state:
 # ---------------- Sidebar inputs -----------------------------------------
 with st.sidebar:
     st.header("Inputs")
-    if st.button("Refresh data", help="Clear cached Snowflake queries"):
-        st.cache_data.clear()
-        st.rerun()
 
     claim_type = st.radio("Claim type", ["TRX", "NBRX"], horizontal=True)
 
@@ -673,11 +670,11 @@ if st.session_state.get("view") == "calculations":
     def _fmt_inputs(df: pd.DataFrame):
         fmt = {}
         for c in _pct_cols(df):
-            fmt[c] = "{:.4%}"
+            fmt[c] = "{:.2%}"
         for c in _int_cols(df):
             fmt[c] = "{:,.0f}"
         if "Ideal Nurtec PD Mkt Share" in df.columns:
-            fmt["Ideal Nurtec PD Mkt Share"] = "{:.4%}"
+            fmt["Ideal Nurtec PD Mkt Share"] = "{:.2%}"
         return df.style.format(fmt, na_rep="\u2014")
 
     def _fmt_metrics(df: pd.DataFrame):
@@ -690,7 +687,7 @@ if st.session_state.get("view") == "calculations":
             if row["Metric"] == "Volume Difference":
                 return f"{v:+,.2f}"
             if row["Metric"] == "Market Share impact":
-                return f"{v*100:+.4f}%"
+                return f"{v*100:+.2f}%"
             return str(v)
         out = df.copy()
         out["Actual (raw)"] = df.apply(lambda r: _cell(r, "Actual (raw)"), axis=1)
@@ -705,9 +702,9 @@ if st.session_state.get("view") == "calculations":
         st.dataframe(_fmt_inputs(qc_l.overall_inputs_df), use_container_width=True, hide_index=True)
 
         k1, k2, k3 = st.columns(3)
-        k1.metric("Overall Impact", f"{qc_l.overall_impact*100:+.4f}%")
-        k2.metric("Sum of payer raw impact", f"{qc_l.sum_payer_raw*100:+.4f}%")
-        k3.metric("Scaling factor", f"{qc_l.scaling_factor:.4f}")
+        k1.metric("Overall Impact", f"{qc_l.overall_impact*100:+.2f}%")
+        k2.metric("Sum of payer raw impact", f"{qc_l.sum_payer_raw*100:+.2f}%")
+        k3.metric("Scaling factor", f"{qc_l.scaling_factor:.2f}")
 
         st.markdown("**Payer-level detail**")
         for pt in qc_l.payer_tables:
@@ -741,24 +738,6 @@ with tab_laad:
         overall_waterfall(res, f"{claim_type} LAAD waterfall -- {prev_qtr} to {curr_qtr}"),
         use_container_width=True,
     )
-    with st.expander("Payer breakdown", expanded=True):
-        st.altair_chart(
-            payer_breakdown_waterfall(res, f"{claim_type} LAAD -- payer breakdown"),
-            use_container_width=True,
-        )
-    st.subheader("Lever & payer impacts (LAAD, %)")
-    df_impacts = pd.DataFrame(
-        {
-            "L1 WD (scaled)": [res.wd.payer_impacts_scaled[p] for p in PAYERS] + [res.wd.overall_impact],
-            "L2 Rejections (scaled)": [res.rj.payer_impacts_scaled[p] for p in PAYERS] + [res.rj.overall_impact],
-            "L3 Reversals (scaled)": [res.rv.payer_impacts_scaled[p] for p in PAYERS] + [res.rv.overall_impact],
-        },
-        index=PAYERS + ["Overall"],
-    ) * 100
-    st.dataframe(df_impacts.style.format("{:+.4f}%"), use_container_width=True)
-
-    st.subheader("Excel-style waterfall table (LAAD)")
-    st.dataframe(excel_style_table(res, include_other=True), use_container_width=True, hide_index=True)
 
 with tab_npa:
     if not npa_available:
@@ -770,32 +749,9 @@ with tab_npa:
         c1, c2, c3 = st.columns(3)
         c1.metric(f"NPA prev ({prev_qtr})", f"{npa_res.previous_ms*100:.2f}%")
         c2.metric(f"NPA curr ({curr_qtr})", f"{npa_res.new_ms*100:.2f}%", f"{npa_res.total_delta*100:+.2f}%")
-        c3.metric("LAAD to NPA factor", f"{npa_res.debug['laad_to_npa_factor']:.3f}")
+        c3.metric("LAAD to NPA factor", f"{npa_res.debug['laad_to_npa_factor']:.2f}")
 
         st.altair_chart(
             overall_waterfall(npa_res, f"{claim_type} NPA-scaled waterfall -- {prev_qtr} to {curr_qtr}"),
             use_container_width=True,
         )
-        with st.expander("Payer breakdown", expanded=True):
-            st.altair_chart(
-                payer_breakdown_waterfall(npa_res, f"{claim_type} NPA -- payer breakdown"),
-                use_container_width=True,
-            )
-        st.subheader("Lever & payer impacts (NPA-scaled, %)")
-        df_npa = pd.DataFrame(
-            {
-                "L1 WD": [npa_res.wd.payer_impacts_scaled[p] for p in PAYERS] + [npa_res.wd.overall_impact],
-                "L2 Rejections": [npa_res.rj.payer_impacts_scaled[p] for p in PAYERS] + [npa_res.rj.overall_impact],
-                "L3 Reversals": [npa_res.rv.payer_impacts_scaled[p] for p in PAYERS] + [npa_res.rv.overall_impact],
-            },
-            index=PAYERS + ["Overall"],
-        ) * 100
-        st.dataframe(df_npa.style.format("{:+.4f}%"), use_container_width=True)
-
-        st.subheader("Excel-style waterfall table (NPA-scaled)")
-        st.dataframe(excel_style_table(npa_res, include_other=False), use_container_width=True, hide_index=True)
-
-st.caption(
-    "LAAD source: VAW_AMER_DESIGN.USPRIMARYCAREADHOCANALYTICSPARTC.USPRIMARYCAREADHOCANALYTICSPARTC_SQL_NURTEC_WATERFALL_QTR_METRICS  |  "
-    "NPA source: VAW_AMER_DESIGN.FORECASTING_DATA_ECOSYSTEM.FORECASTING_DATA_ECOSYSTEM_NURTEC_NPA_METRICS"
-)
