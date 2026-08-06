@@ -572,11 +572,9 @@ if npa_available:
     npa_res = rescale_to_npa(res, float(npa_prev.iloc[0]), float(npa_curr.iloc[0]))
 
 # ---------------- Header KPIs --------------------------------------------
-c1, c2, c3, c4 = st.columns(4)
+c1, c2 = st.columns(2)
 c1.metric(f"Previous MS ({prev_qtr})", f"{res.previous_ms*100:.2f}%")
 c2.metric(f"New MS ({curr_qtr})", f"{res.new_ms*100:.2f}%", f"{res.total_delta*100:+.2f}%")
-c3.metric("Level 1 - WD", f"{res.wd.overall_impact*100:+.3f}%")
-c4.metric("Level 2 - Rejections", f"{res.rj.overall_impact*100:+.3f}%")
 
 # ---------------- Tabs ----------------------------------------------------
 tab_laad, tab_npa, tab_qc, tab_data = st.tabs(
