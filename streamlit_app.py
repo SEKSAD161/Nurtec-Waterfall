@@ -577,8 +577,8 @@ c1.metric(f"Previous MS ({prev_qtr})", f"{res.previous_ms*100:.2f}%")
 c2.metric(f"New MS ({curr_qtr})", f"{res.new_ms*100:.2f}%", f"{res.total_delta*100:+.2f}%")
 
 # ---------------- Tabs ----------------------------------------------------
-tab_laad, tab_npa, tab_qc, tab_data = st.tabs(
-    ["LAAD waterfall", "NPA-scaled waterfall", "QC / Calculations", "Raw metrics"]
+tab_laad, tab_npa, tab_qc = st.tabs(
+    ["LAAD waterfall", "NPA-scaled waterfall", "QC / Calculations"]
 )
 
 HOW_TO_USE = (
@@ -620,8 +620,13 @@ def _render_notes():
     with st.expander("Why scaling?", expanded=False):
         st.markdown(WHY_SCALING)
 
-with tab_laad:
+# Add Business Rules & Assumptions section to the sidebar
+with st.sidebar:
+    st.markdown("<div style='margin-top:1rem'></div>", unsafe_allow_html=True)
+    st.header("Business Rules & Assumptions")
     _render_notes()
+
+with tab_laad:
     st.altair_chart(
         overall_waterfall(res, f"{claim_type} LAAD waterfall -- {prev_qtr} to {curr_qtr}"),
         use_container_width=True,
@@ -652,7 +657,6 @@ with tab_npa:
             msg += f"\n\nError: {npa_error}"
         st.warning(msg)
     else:
-        _render_notes()
         c1, c2, c3 = st.columns(3)
         c1.metric(f"NPA prev ({prev_qtr})", f"{npa_res.previous_ms*100:.2f}%")
         c2.metric(f"NPA curr ({curr_qtr})", f"{npa_res.new_ms*100:.2f}%", f"{npa_res.total_delta*100:+.2f}%")
@@ -754,22 +758,6 @@ with tab_qc:
     render_lever(qc["L1"])
     render_lever(qc["L2"])
     render_lever(qc["L3"])
-
-with tab_data:
-    st.subheader(f"Metrics side-by-side -- {claim_type}, {prev_qtr} vs {curr_qtr}")
-    view = (
-        laad[
-            (laad["CLAIM_TYPE"].str.upper() == claim_type.upper())
-            & (laad["QTR"].isin([prev_qtr, curr_qtr]))
-        ]
-        .pivot_table(index=["BRAND", "PAYER", "METRIC"], columns="QTR", values="VALUE", aggfunc="first")
-        .reset_index()
-    )
-    st.dataframe(view, use_container_width=True, hide_index=True)
-
-    if not npa_df.empty:
-        st.subheader("NPA quarterly market share (all quarters)")
-        st.dataframe(npa_df, use_container_width=True, hide_index=True)
 
 st.caption(
     "LAAD source: VAW_AMER_DESIGN.USPRIMARYCAREADHOCANALYTICSPARTC.USPRIMARYCAREADHOCANALYTICSPARTC_SQL_NURTEC_WATERFALL_QTR_METRICS  |  "
