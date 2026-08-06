@@ -99,6 +99,7 @@ def _build_waterfall_df(labels: list, measures: list, values: list) -> pd.DataFr
             "label": label,
             "start": start,
             "end": end,
+            "top": max(start, end),
             "color": color,
             "text": text,
             "order": i,
@@ -107,13 +108,13 @@ def _build_waterfall_df(labels: list, measures: list, values: list) -> pd.DataFr
     return pd.DataFrame(rows)
 
 
-def _zoomed_y_domain(df: pd.DataFrame, pad_frac: float = 0.15) -> list:
+def _zoomed_y_domain(df: pd.DataFrame, pad_frac: float = 0.4) -> list:
     """Compute a y-domain that ignores the trivial 0 start of anchor bars, so
     the mid-range lever bars are visible instead of being crushed by a full
-    0-to-max scale. Adds a small proportional padding on each side.
+    0-to-max scale. Adds a proportional padding on each side so bars aren't
+    pressed against the axis edges.
     """
     anchor = df["measure"].isin(["absolute", "total"])
-    # Points we actually care about visually:
     pts = pd.concat([
         df.loc[~anchor, "start"],
         df.loc[~anchor, "end"],
@@ -156,7 +157,7 @@ def overall_waterfall(res: WaterfallResult, title: str) -> alt.Chart:
         dy=-10, fontSize=11, font="Inter", fontWeight=600, color=_NAVY_900,
     ).encode(
         x=alt.X("label:N", sort=alt.EncodingSortField(field="order")),
-        y=alt.Y("end:Q",
+        y=alt.Y("top:Q",
                 scale=alt.Scale(zero=False, domain=y_domain, nice=False, clamp=True)),
         text="text:N",
     )
