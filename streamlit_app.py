@@ -816,13 +816,10 @@ with tab_qoq:
         )
 
         metric_code = _METRIC_OPTIONS[metric_label]
-        # Drop quarters known to be partial / incomplete for QoQ trending.
-        _INCOMPLETE_QTRS = {"2026Q3"}
-        qoq_df = laad[~laad["QTR"].isin(_INCOMPLETE_QTRS)]
         if selected_payers:
             st.altair_chart(
                 qoq_metric_chart(
-                    qoq_df,
+                    laad,
                     metric=metric_code,
                     brand=brand,
                     claim_type=claim_type,
