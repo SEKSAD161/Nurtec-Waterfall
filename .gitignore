@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Environments
+.env
+.venv/
+venv/
+env/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Streamlit local secrets
+.streamlit/secrets.toml
+
+# Snowflake / Cortex Code workspace metadata
+.snowflake/
+snow://
+*.snowflake-workspace
+
+# Intermediate helper artifacts (large base64 blobs, chunked stage-uploads, downloaded copies)
+_ws_dl/
+_wf_b64.txt
+_sa_b64.txt
+_wf_chunks.txt
+_wf_out.txt
+_all_chunks.tsv
+
+# Generated / temporary
+*.log
+*.tmp
