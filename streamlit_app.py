@@ -751,68 +751,67 @@ tab_npa, tab_laad, tab_qoq = st.tabs(
 )
 
 with tab_laad:
-    st.altair_chart(
-        overall_waterfall(res, f"{claim_type} LAAD waterfall -- {prev_qtr} to {curr_qtr}"),
-        use_container_width=True,
-    )
+    _chart_col, _table_col = st.columns([3, 2], gap="medium")
+    with _chart_col:
+        st.altair_chart(
+            overall_waterfall(res, f"{claim_type} LAAD waterfall -- {prev_qtr} to {curr_qtr}"),
+            use_container_width=True,
+        )
+    with _table_col:
+        st.subheader(f"Payer-level split")
+        st.caption(f"{claim_type}, {prev_qtr} \u2192 {curr_qtr}")
 
-    st.subheader(f"Payer-level split -- {claim_type}, {prev_qtr} \u2192 {curr_qtr}")
-    st.caption(
-        "Waterfall levels with per-payer contributions. Overall column matches the waterfall above; "
-        "payer columns are the scaled sub-impacts that sum (post-scaling) to the Overall value."
-    )
+        _payer_cols = list(PAYERS)  # Commercial, Medicaid, Medicare, Others
+        _level_rows = [
+            ("Level 1 - WD", res.wd),
+            ("Level 2 - Rejections", res.rj),
+            ("Level 3 - Reversals", res.rv),
+        ]
 
-    _payer_cols = list(PAYERS)  # Commercial, Medicaid, Medicare, Others
-    _level_rows = [
-        ("Level 1 - WD", res.wd),
-        ("Level 2 - Rejections", res.rj),
-        ("Level 3 - Reversals", res.rv),
-    ]
+        def _pct(x):
+            return "" if x is None else f"{x*100:+.2f}%"
 
-    def _pct(x):
-        return "" if x is None else f"{x*100:+.2f}%"
+        def _pct_anchor(x):
+            return "" if x is None else f"{x*100:.2f}%"
 
-    def _pct_anchor(x):
-        return "" if x is None else f"{x*100:.2f}%"
-
-    table_rows = []
-    row = {"Waterfall step": "Previous market share"}
-    for p in _payer_cols:
-        row[p] = ""
-    row["Overall"] = _pct_anchor(res.previous_ms)
-    table_rows.append(row)
-
-    for name, lever in _level_rows:
-        row = {"Waterfall step": name}
+        table_rows = []
+        row = {"Waterfall step": "Previous market share"}
         for p in _payer_cols:
-            row[p] = _pct(lever.payer_impacts_scaled.get(p, 0.0))
-        row["Overall"] = _pct(lever.overall_impact)
+            row[p] = ""
+        row["Overall"] = _pct_anchor(res.previous_ms)
         table_rows.append(row)
 
-    row = {"Waterfall step": "Other reasons"}
-    for p in _payer_cols:
-        row[p] = ""
-    row["Overall"] = _pct(res.other)
-    table_rows.append(row)
+        for name, lever in _level_rows:
+            row = {"Waterfall step": name}
+            for p in _payer_cols:
+                row[p] = _pct(lever.payer_impacts_scaled.get(p, 0.0))
+            row["Overall"] = _pct(lever.overall_impact)
+            table_rows.append(row)
 
-    row = {"Waterfall step": "New market share"}
-    for p in _payer_cols:
-        row[p] = ""
-    row["Overall"] = _pct_anchor(res.new_ms)
-    table_rows.append(row)
+        row = {"Waterfall step": "Other reasons"}
+        for p in _payer_cols:
+            row[p] = ""
+        row["Overall"] = _pct(res.other)
+        table_rows.append(row)
 
-    df_payer_split = pd.DataFrame(table_rows, columns=["Waterfall step"] + _payer_cols + ["Overall"])
-    st.dataframe(df_payer_split, use_container_width=True, hide_index=True)
+        row = {"Waterfall step": "New market share"}
+        for p in _payer_cols:
+            row[p] = ""
+        row["Overall"] = _pct_anchor(res.new_ms)
+        table_rows.append(row)
 
-    with st.expander("How the numbers relate", expanded=False):
-        st.markdown(
-            "- **Previous / New market share**: Nurtec's overall LAAD market share for that quarter.\n"
-            "- **Level 1 / 2 / 3 overall**: what the market share would change by if only that lever moved.\n"
-            "- **Payer columns**: each lever's overall impact split across payer types after payer-mix "
-            "scaling. The four payer values for a level sum (approximately) to the level's Overall value.\n"
-            "- **Other reasons**: residual = (New MS - Previous MS) - (L1 + L2 + L3). Small when levers "
-            "move roughly independently."
-        )
+        df_payer_split = pd.DataFrame(table_rows, columns=["Waterfall step"] + _payer_cols + ["Overall"])
+        st.dataframe(df_payer_split, use_container_width=True, hide_index=True)
+
+        with st.expander("How the numbers relate", expanded=False):
+            st.markdown(
+                "- **Previous / New market share**: Nurtec's overall LAAD market share for that quarter.\n"
+                "- **Level 1 / 2 / 3 overall**: what the market share would change by if only that lever moved.\n"
+                "- **Payer columns**: each lever's overall impact split across payer types after payer-mix "
+                "scaling. The four payer values for a level sum (approximately) to the level's Overall value.\n"
+                "- **Other reasons**: residual = (New MS - Previous MS) - (L1 + L2 + L3). Small when levers "
+                "move roughly independently."
+            )
 
 with tab_npa:
     if not npa_available:
