@@ -126,17 +126,22 @@ def _zoomed_y_domain(df: pd.DataFrame, pad_frac: float = 0.4) -> list:
     return [max(lo - pad, 0.0), hi + pad]
 
 
-def overall_waterfall(res: WaterfallResult, title: str) -> alt.Chart:
-    labels = ["Previous MS", "Level 1 - WD", "Level 2 - Rejections", "Level 3 - Reversals", "Other reasons", "New MS"]
-    measures = ["absolute", "relative", "relative", "relative", "relative", "total"]
+def overall_waterfall(res: WaterfallResult, title: str, include_other: bool = True) -> alt.Chart:
+    labels = ["Previous MS", "Level 1 - WD", "Level 2 - Rejections", "Level 3 - Reversals"]
+    measures = ["absolute", "relative", "relative", "relative"]
     values = [
         res.previous_ms,
         res.wd.overall_impact,
         res.rj.overall_impact,
         res.rv.overall_impact,
-        res.other,
-        res.new_ms,
     ]
+    if include_other:
+        labels.append("Other reasons")
+        measures.append("relative")
+        values.append(res.other)
+    labels.append("New MS")
+    measures.append("total")
+    values.append(res.new_ms)
     df = _build_waterfall_df(labels, measures, values)
     y_domain = _zoomed_y_domain(df)
 

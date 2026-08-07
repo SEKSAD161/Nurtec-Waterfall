@@ -769,7 +769,7 @@ with tab_npa:
         c3.metric("LAAD to NPA factor", f"{npa_res.debug['laad_to_npa_factor']:.2f}")
 
         st.altair_chart(
-            overall_waterfall(npa_res, f"{claim_type} NPA-scaled waterfall -- {prev_qtr} to {curr_qtr}"),
+            overall_waterfall(npa_res, f"{claim_type} NPA-scaled waterfall -- {prev_qtr} to {curr_qtr}", include_other=False),
             use_container_width=True,
         )
 
