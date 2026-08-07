@@ -751,7 +751,7 @@ tab_npa, tab_laad, tab_qoq = st.tabs(
 )
 
 with tab_laad:
-    _chart_col, _table_col = st.columns([3, 2], gap="medium")
+    _chart_col, _table_col = st.columns([1, 1], gap="medium")
     with _chart_col:
         st.altair_chart(
             overall_waterfall(res, f"{claim_type} LAAD waterfall -- {prev_qtr} to {curr_qtr}"),
