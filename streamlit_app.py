@@ -750,6 +750,88 @@ tab_npa, tab_laad, tab_qoq = st.tabs(
     ["NPA-scaled waterfall", "LAAD waterfall", "QoQ Metrics"]
 )
 
+def render_payer_split_table(
+    r: WaterfallResult,
+    heading: str,
+    caption: str,
+    include_other: bool = True,
+) -> None:
+    """Wide payer-level split table with lever-colored rows matching the waterfall bars."""
+    _payer_cols = list(PAYERS)
+    _hdr = {"L1": LEVER_COLORS["L1"], "L2": LEVER_COLORS["L2"], "L3": LEVER_COLORS["L3"]}
+    _anchor_bg = "#F1F5F9"
+    _other_bg = "#E2E8F0"
+
+    def _pct(x):
+        return "" if x is None else f"{x*100:+.2f}%"
+
+    def _pct_anchor(x):
+        return "" if x is None else f"{x*100:.2f}%"
+
+    rows = []
+    # (row_kind, {col: value})
+    anchor_prev = {"Waterfall step": "Previous market share"}
+    for p in _payer_cols:
+        anchor_prev[p] = ""
+    anchor_prev["Overall"] = _pct_anchor(r.previous_ms)
+    rows.append(("anchor", anchor_prev))
+
+    for lever_code, name, lever in [
+        ("L1", "Level 1 - WD", r.wd),
+        ("L2", "Level 2 - Rejections", r.rj),
+        ("L3", "Level 3 - Reversals", r.rv),
+    ]:
+        row = {"Waterfall step": name}
+        for p in _payer_cols:
+            row[p] = _pct(lever.payer_impacts_scaled.get(p, 0.0))
+        row["Overall"] = _pct(lever.overall_impact)
+        rows.append((lever_code, row))
+
+    if include_other:
+        other_row = {"Waterfall step": "Other reasons"}
+        for p in _payer_cols:
+            other_row[p] = ""
+        other_row["Overall"] = _pct(r.other)
+        rows.append(("other", other_row))
+
+    anchor_new = {"Waterfall step": "New market share"}
+    for p in _payer_cols:
+        anchor_new[p] = ""
+    anchor_new["Overall"] = _pct_anchor(r.new_ms)
+    rows.append(("anchor", anchor_new))
+
+    df = pd.DataFrame([r[1] for r in rows], columns=["Waterfall step"] + _payer_cols + ["Overall"])
+    row_kinds = [r[0] for r in rows]
+
+    def _row_style(row):
+        kind = row_kinds[row.name]
+        if kind == "anchor":
+            return [f"background-color:{_anchor_bg};font-weight:600;color:#0F172A;"] * len(row)
+        if kind == "other":
+            return [f"background-color:{_other_bg};color:#0F172A;font-style:italic;"] * len(row)
+        if kind in _hdr:
+            return [f"background-color:{_hdr[kind]};color:#FFFFFF;font-weight:700;"] * len(row)
+        return [""] * len(row)
+
+    styled = (
+        df.style
+        .apply(_row_style, axis=1)
+        .set_properties(**{"text-align": "center", "font-family": "Inter, sans-serif"})
+        .set_table_styles([
+            {"selector": "", "props": "width:100%;table-layout:fixed;border-collapse:collapse;"},
+            {"selector": "th", "props": "background:#0A1A3D;color:#FFFFFF;font-weight:700;text-align:center;padding:8px 10px;"},
+            {"selector": "td", "props": "border:1px solid rgba(15,23,42,0.10);padding:6px 10px;"},
+        ])
+        .hide(axis="index")
+    )
+    st.subheader(heading)
+    st.caption(caption)
+    st.markdown(
+        f"<div style='width:100%;overflow-x:auto;'>{styled.to_html()}</div>",
+        unsafe_allow_html=True,
+    )
+
+
 with tab_laad:
     _chart_col, _table_col = st.columns([1, 1], gap="medium")
     with _chart_col:
@@ -758,51 +840,12 @@ with tab_laad:
             use_container_width=True,
         )
     with _table_col:
-        st.subheader(f"Payer-level split")
-        st.caption(f"{claim_type}, {prev_qtr} \u2192 {curr_qtr}")
-
-        _payer_cols = list(PAYERS)  # Commercial, Medicaid, Medicare, Others
-        _level_rows = [
-            ("Level 1 - WD", res.wd),
-            ("Level 2 - Rejections", res.rj),
-            ("Level 3 - Reversals", res.rv),
-        ]
-
-        def _pct(x):
-            return "" if x is None else f"{x*100:+.2f}%"
-
-        def _pct_anchor(x):
-            return "" if x is None else f"{x*100:.2f}%"
-
-        table_rows = []
-        row = {"Waterfall step": "Previous market share"}
-        for p in _payer_cols:
-            row[p] = ""
-        row["Overall"] = _pct_anchor(res.previous_ms)
-        table_rows.append(row)
-
-        for name, lever in _level_rows:
-            row = {"Waterfall step": name}
-            for p in _payer_cols:
-                row[p] = _pct(lever.payer_impacts_scaled.get(p, 0.0))
-            row["Overall"] = _pct(lever.overall_impact)
-            table_rows.append(row)
-
-        row = {"Waterfall step": "Other reasons"}
-        for p in _payer_cols:
-            row[p] = ""
-        row["Overall"] = _pct(res.other)
-        table_rows.append(row)
-
-        row = {"Waterfall step": "New market share"}
-        for p in _payer_cols:
-            row[p] = ""
-        row["Overall"] = _pct_anchor(res.new_ms)
-        table_rows.append(row)
-
-        df_payer_split = pd.DataFrame(table_rows, columns=["Waterfall step"] + _payer_cols + ["Overall"])
-        st.dataframe(df_payer_split, use_container_width=True, hide_index=True)
-
+        render_payer_split_table(
+            res,
+            heading="Payer-level split",
+            caption=f"LAAD -- {claim_type}, {prev_qtr} \u2192 {curr_qtr}",
+            include_other=True,
+        )
         with st.expander("How the numbers relate", expanded=False):
             st.markdown(
                 "- **Previous / New market share**: Nurtec's overall LAAD market share for that quarter.\n"
@@ -832,68 +875,11 @@ with tab_npa:
                 use_container_width=True,
             )
         with _npa_table_col:
-            st.subheader("Waterfall breakdown")
-            st.caption(f"NPA-scaled -- {claim_type}, {prev_qtr} \u2192 {curr_qtr}")
-
-            # Colors mirror the chart bars (LEVER_COLORS from charts.py)
-            _hdr = {"L1": LEVER_COLORS["L1"], "L2": LEVER_COLORS["L2"], "L3": LEVER_COLORS["L3"]}
-            _sub = {"L1": "#DBEAFE", "L2": "#DCFCE7", "L3": "#FED7AA"}
-            _anchor_bg = "#F1F5F9"
-
-            def _pct2(x, signed=False):
-                if x is None:
-                    return ""
-                return f"{x*100:+.2f}%" if signed else f"{x*100:.2f}%"
-
-            payer_order = list(PAYERS)  # Commercial, Medicaid, Medicare, Others
-            npa_rows = []
-            npa_rows.append(("anchor", "Previous market share", _pct2(npa_res.previous_ms)))
-            for lever_code, lever_name, lever_obj in [
-                ("L1", "Level 1 - WD", npa_res.wd),
-                ("L2", "Level 2 - Rejections", npa_res.rj),
-                ("L3", "Level 3 - Reversals", npa_res.rv),
-            ]:
-                npa_rows.append((lever_code + "_hdr", lever_name, _pct2(lever_obj.overall_impact, signed=True)))
-                for i, payer in enumerate(payer_order, start=1):
-                    npa_rows.append((
-                        lever_code + "_sub",
-                        f"{lever_code}.{i} - {payer}",
-                        _pct2(lever_obj.payer_impacts_scaled.get(payer, 0.0), signed=True),
-                    ))
-            npa_rows.append(("anchor", "New market share", _pct2(npa_res.new_ms)))
-
-            df_npa_break = pd.DataFrame(
-                [(r[1], r[2]) for r in npa_rows],
-                columns=["Waterfall step", "Value"],
-            )
-            row_kinds = [r[0] for r in npa_rows]
-
-            def _row_style(row):
-                kind = row_kinds[row.name]
-                if kind == "anchor":
-                    return [f"background-color:{_anchor_bg};font-weight:600;color:#0F172A;"] * len(row)
-                if kind.endswith("_hdr"):
-                    code = kind.split("_")[0]
-                    return [f"background-color:{_hdr[code]};font-weight:700;color:#FFFFFF;"] * len(row)
-                if kind.endswith("_sub"):
-                    code = kind.split("_")[0]
-                    return [f"background-color:{_sub[code]};color:#0F172A;"] * len(row)
-                return [""] * len(row)
-
-            styled = (
-                df_npa_break.style
-                .apply(_row_style, axis=1)
-                .set_properties(**{"text-align": "center", "font-family": "Inter, sans-serif"})
-                .set_table_styles([
-                    {"selector": "", "props": "width:100%;table-layout:fixed;border-collapse:collapse;"},
-                    {"selector": "th", "props": "background:#0A1A3D;color:#FFFFFF;font-weight:700;text-align:center;padding:8px 10px;"},
-                    {"selector": "td", "props": "border:1px solid rgba(15,23,42,0.10);padding:6px 10px;"},
-                ])
-                .hide(axis="index")
-            )
-            st.markdown(
-                f"<div style='width:100%;overflow-x:auto;'>{styled.to_html()}</div>",
-                unsafe_allow_html=True,
+            render_payer_split_table(
+                npa_res,
+                heading="Payer-level split",
+                caption=f"NPA-scaled -- {claim_type}, {prev_qtr} \u2192 {curr_qtr}",
+                include_other=False,
             )
 
 with tab_qoq:
