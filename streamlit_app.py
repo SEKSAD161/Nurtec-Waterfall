@@ -813,7 +813,7 @@ def render_payer_split_table(
             return [f"background-color:{_hdr[kind]};color:#FFFFFF;font-weight:700;"] * len(row)
         return [""] * len(row)
 
-    styled = (
+    styler = (
         df.style
         .apply(_row_style, axis=1)
         .set_properties(**{"text-align": "center", "font-family": "Inter, sans-serif"})
@@ -821,13 +821,28 @@ def render_payer_split_table(
             {"selector": "", "props": "width:100%;table-layout:fixed;border-collapse:collapse;"},
             {"selector": "th", "props": "background:#0A1A3D;color:#FFFFFF;font-weight:700;text-align:center;padding:8px 10px;"},
             {"selector": "td", "props": "border:1px solid rgba(15,23,42,0.10);padding:6px 10px;"},
+            # Hide the pandas index column across pandas versions
+            {"selector": "th.row_heading, td.row_heading, th.blank", "props": "display:none;"},
         ])
-        .hide(axis="index")
     )
+    # Best-effort hide-index for pandas that supports it
+    for _hide in ("hide", "hide_index"):
+        try:
+            method = getattr(styler, _hide, None)
+            if method is None:
+                continue
+            styler = method(axis="index") if _hide == "hide" else method()
+            break
+        except Exception:
+            continue
     st.subheader(heading)
     st.caption(caption)
+    try:
+        html = styler.to_html()
+    except Exception:
+        html = df.to_html(index=False, classes="fallback", border=0)
     st.markdown(
-        f"<div style='width:100%;overflow-x:auto;'>{styled.to_html()}</div>",
+        f"<div style='width:100%;overflow-x:auto;'>{html}</div>",
         unsafe_allow_html=True,
     )
 
