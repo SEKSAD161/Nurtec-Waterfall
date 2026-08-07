@@ -92,6 +92,18 @@ alt.themes.register("pchub", _pchub_theme)
 alt.themes.enable("pchub")
 
 
+def _split_label(label: str) -> tuple[str, str]:
+    """Split a waterfall label into (prefix, suffix) so we can render it on
+    two lines with different colors without breaking single words apart."""
+    if " - " in label:
+        head, tail = label.split(" - ", 1)
+        return head, tail
+    if " " in label:
+        head, tail = label.split(" ", 1)
+        return head, tail
+    return label, ""
+
+
 def _build_waterfall_df(labels: list, measures: list, values: list) -> pd.DataFrame:
     """Build a DataFrame with running totals for waterfall rendering."""
     rows = []
@@ -115,8 +127,11 @@ def _build_waterfall_df(labels: list, measures: list, values: list) -> pd.DataFr
             if measure in ("absolute", "total")
             else f"{value*100:+.2f}%"
         )
+        prefix, suffix = _split_label(label)
         rows.append({
             "label": label,
+            "prefix": prefix,
+            "suffix": suffix,
             "start": start,
             "end": end,
             "top": max(start, end),
@@ -167,7 +182,7 @@ def overall_waterfall(res: WaterfallResult, title: str, include_other: bool = Tr
 
     bars = alt.Chart(df).mark_bar(size=44, cornerRadius=4).encode(
         x=alt.X("label:N", sort=alt.EncodingSortField(field="order"), title=None,
-                axis=alt.Axis(labelAngle=-30, labelLimit=400, labelPadding=6, labelFontSize=11)),
+                axis=alt.Axis(labels=False, ticks=True, domain=True, labelPadding=4)),
         y=alt.Y("start:Q", title="Market Share",
                 axis=alt.Axis(format=".1%"),
                 scale=alt.Scale(zero=False, domain=y_domain, nice=False, clamp=True)),
@@ -179,14 +194,31 @@ def overall_waterfall(res: WaterfallResult, title: str, include_other: bool = Tr
         ],
     )
     text_layer = alt.Chart(df).mark_text(
-        dy=-10, fontSize=11, font="Inter", fontWeight=600, color=_NAVY_900,
+        dy=-10, fontSize=11, font="Inter", fontWeight=500, color=_MUTED,
     ).encode(
         x=alt.X("label:N", sort=alt.EncodingSortField(field="order")),
         y=alt.Y("top:Q",
                 scale=alt.Scale(zero=False, domain=y_domain, nice=False, clamp=True)),
         text="text:N",
     )
-    chart = (bars + text_layer).properties(title=title, height=460, width="container")
+    # Two-line x-axis labels: prefix (dark navy, bold) on top, suffix (muted) below.
+    prefix_layer = alt.Chart(df).mark_text(
+        dy=16, fontSize=12, font="Manrope", fontWeight=700, color=_NAVY_900, baseline="top",
+    ).encode(
+        x=alt.X("label:N", sort=alt.EncodingSortField(field="order")),
+        y=alt.datum(y_domain[0]),
+        text="prefix:N",
+    )
+    suffix_layer = alt.Chart(df).mark_text(
+        dy=32, fontSize=10.5, font="Inter", fontWeight=500, color=_MUTED, baseline="top",
+    ).encode(
+        x=alt.X("label:N", sort=alt.EncodingSortField(field="order")),
+        y=alt.datum(y_domain[0]),
+        text="suffix:N",
+    )
+    chart = (bars + text_layer + prefix_layer + suffix_layer).properties(
+        title=title, height=480, width="container",
+    )
     return chart
 
 
