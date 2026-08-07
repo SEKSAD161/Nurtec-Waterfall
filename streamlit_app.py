@@ -746,8 +746,8 @@ c1.metric(f"Previous MS ({prev_qtr})", f"{res.previous_ms*100:.2f}%")
 c2.metric(f"New MS ({curr_qtr})", f"{res.new_ms*100:.2f}%", f"{res.total_delta*100:+.2f}%")
 
 # ---------------- Tabs ----------------------------------------------------
-tab_npa, tab_laad, tab_payer, tab_qoq = st.tabs(
-    ["NPA-scaled waterfall", "LAAD waterfall", "Payer level split", "QoQ Metrics"]
+tab_npa, tab_laad, tab_qoq = st.tabs(
+    ["NPA-scaled waterfall", "LAAD waterfall", "QoQ Metrics"]
 )
 
 with tab_laad:
@@ -756,27 +756,9 @@ with tab_laad:
         use_container_width=True,
     )
 
-with tab_npa:
-    if not npa_available:
-        msg = f"No NPA rows for {prev_qtr} and/or {curr_qtr} in `{'/'.join(['FORECASTING_DATA_ECOSYSTEM','NURTEC_NPA_METRICS'])}`."
-        if npa_error:
-            msg += f"\n\nError: {npa_error}"
-        st.warning(msg)
-    else:
-        c1, c2, c3 = st.columns(3)
-        c1.metric(f"NPA prev ({prev_qtr})", f"{npa_res.previous_ms*100:.2f}%")
-        c2.metric(f"NPA curr ({curr_qtr})", f"{npa_res.new_ms*100:.2f}%", f"{npa_res.total_delta*100:+.2f}%")
-        c3.metric("LAAD to NPA factor", f"{npa_res.debug['laad_to_npa_factor']:.2f}")
-
-        st.altair_chart(
-            overall_waterfall(npa_res, f"{claim_type} NPA-scaled waterfall -- {prev_qtr} to {curr_qtr}", include_other=False),
-            use_container_width=True,
-        )
-
-with tab_payer:
     st.subheader(f"Payer-level split -- {claim_type}, {prev_qtr} \u2192 {curr_qtr}")
     st.caption(
-        "Waterfall levels with per-payer contributions. Overall column matches the LAAD waterfall; "
+        "Waterfall levels with per-payer contributions. Overall column matches the waterfall above; "
         "payer columns are the scaled sub-impacts that sum (post-scaling) to the Overall value."
     )
 
@@ -794,14 +776,12 @@ with tab_payer:
         return "" if x is None else f"{x*100:.2f}%"
 
     table_rows = []
-    # Previous market share (anchor)
     row = {"Waterfall step": "Previous market share"}
     for p in _payer_cols:
         row[p] = ""
     row["Overall"] = _pct_anchor(res.previous_ms)
     table_rows.append(row)
 
-    # Lever rows: L1, L2, L3
     for name, lever in _level_rows:
         row = {"Waterfall step": name}
         for p in _payer_cols:
@@ -809,14 +789,12 @@ with tab_payer:
         row["Overall"] = _pct(lever.overall_impact)
         table_rows.append(row)
 
-    # Other reasons (residual, anchor-style formatting with sign)
     row = {"Waterfall step": "Other reasons"}
     for p in _payer_cols:
         row[p] = ""
     row["Overall"] = _pct(res.other)
     table_rows.append(row)
 
-    # New market share (anchor)
     row = {"Waterfall step": "New market share"}
     for p in _payer_cols:
         row[p] = ""
@@ -826,7 +804,6 @@ with tab_payer:
     df_payer_split = pd.DataFrame(table_rows, columns=["Waterfall step"] + _payer_cols + ["Overall"])
     st.dataframe(df_payer_split, use_container_width=True, hide_index=True)
 
-    # Verification note: check that per-payer impacts sum to overall for each lever
     with st.expander("How the numbers relate", expanded=False):
         st.markdown(
             "- **Previous / New market share**: Nurtec's overall LAAD market share for that quarter.\n"
@@ -835,6 +812,23 @@ with tab_payer:
             "scaling. The four payer values for a level sum (approximately) to the level's Overall value.\n"
             "- **Other reasons**: residual = (New MS - Previous MS) - (L1 + L2 + L3). Small when levers "
             "move roughly independently."
+        )
+
+with tab_npa:
+    if not npa_available:
+        msg = f"No NPA rows for {prev_qtr} and/or {curr_qtr} in `{'/'.join(['FORECASTING_DATA_ECOSYSTEM','NURTEC_NPA_METRICS'])}`."
+        if npa_error:
+            msg += f"\n\nError: {npa_error}"
+        st.warning(msg)
+    else:
+        c1, c2, c3 = st.columns(3)
+        c1.metric(f"NPA prev ({prev_qtr})", f"{npa_res.previous_ms*100:.2f}%")
+        c2.metric(f"NPA curr ({curr_qtr})", f"{npa_res.new_ms*100:.2f}%", f"{npa_res.total_delta*100:+.2f}%")
+        c3.metric("LAAD to NPA factor", f"{npa_res.debug['laad_to_npa_factor']:.2f}")
+
+        st.altair_chart(
+            overall_waterfall(npa_res, f"{claim_type} NPA-scaled waterfall -- {prev_qtr} to {curr_qtr}", include_other=False),
+            use_container_width=True,
         )
 
 with tab_qoq:
