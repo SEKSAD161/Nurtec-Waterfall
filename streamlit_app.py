@@ -756,11 +756,35 @@ def render_payer_split_table(
     caption: str,
     include_other: bool = True,
 ) -> None:
-    """Wide payer-level split table with lever-colored rows matching the waterfall bars."""
-    _payer_cols = list(PAYERS)
-    _hdr = {"L1": LEVER_COLORS["L1"], "L2": LEVER_COLORS["L2"], "L3": LEVER_COLORS["L3"]}
-    _anchor_bg = "#F1F5F9"
-    _other_bg = "#E2E8F0"
+    """Wide payer-level split table. Left column = 'Waterfall step' with dark
+    lever-colored background and two-line label; value columns = lighter tint
+    of the same lever color. Word-safe label wrapping (Level 1 on top, WD below).
+    """
+    payer_cols = list(PAYERS)
+
+    # Dark (left column) + light (value columns) per lever + anchor / other.
+    dark = {
+        "anchor": "#CBD5E1",
+        "other":  "#CBD5E1",
+        "L1":     LEVER_COLORS["L1"],
+        "L2":     LEVER_COLORS["L2"],
+        "L3":     LEVER_COLORS["L3"],
+    }
+    light = {
+        "anchor": "#F1F5F9",
+        "other":  "#EEF2F7",
+        "L1":     "#DBEAFE",
+        "L2":     "#DCFCE7",
+        "L3":     "#FED7AA",
+    }
+    step_text = {
+        "anchor": "#0F172A",
+        "other":  "#334155",
+        "L1":     "#FFFFFF",
+        "L2":     "#FFFFFF",
+        "L3":     "#FFFFFF",
+    }
+    value_text = "#0F172A"
 
     def _pct(x):
         return "" if x is None else f"{x*100:+.2f}%"
@@ -768,86 +792,75 @@ def render_payer_split_table(
     def _pct_anchor(x):
         return "" if x is None else f"{x*100:.2f}%"
 
-    rows = []
-    # (row_kind, {col: value})
-    anchor_prev = {"Waterfall step": "Previous market share"}
-    for p in _payer_cols:
-        anchor_prev[p] = ""
-    anchor_prev["Overall"] = _pct_anchor(r.previous_ms)
-    rows.append(("anchor", anchor_prev))
+    def _wrap_step(name: str) -> str:
+        # Word-safe wrap so single words never split across lines.
+        if " - " in name:
+            head, tail = name.split(" - ", 1)
+            return f"{head}<br>{tail}"
+        if " " in name:
+            head, tail = name.split(" ", 1)
+            return f"{head}<br>{tail}"
+        return name
 
-    for lever_code, name, lever in [
+    def _row(kind: str, step_name: str, overall_value: str, payer_values: list, italic: bool = False):
+        step_bg = dark[kind]
+        value_bg = light[kind]
+        st_color = step_text[kind]
+        st_weight = "700" if kind in ("L1", "L2", "L3", "anchor") else "600"
+        italic_css = "font-style:italic;" if italic else ""
+
+        step_cell = (
+            f'<td style="background:{step_bg};color:{st_color};font-weight:{st_weight};'
+            f'text-align:left;padding:6px 10px;line-height:1.2;{italic_css}">'
+            f'{_wrap_step(step_name)}</td>'
+        )
+        value_cells = "".join(
+            f'<td style="background:{value_bg};color:{value_text};text-align:center;'
+            f'padding:6px 8px;white-space:nowrap;{italic_css}">{v}</td>'
+            for v in payer_values
+        )
+        overall_cell = (
+            f'<td style="background:{value_bg};color:{value_text};font-weight:600;'
+            f'text-align:center;padding:6px 8px;white-space:nowrap;{italic_css}">'
+            f'{overall_value}</td>'
+        )
+        return f"<tr>{step_cell}{value_cells}{overall_cell}</tr>"
+
+    header_cells = (
+        '<th style="text-align:left;padding:8px 10px;">Waterfall step</th>'
+        + "".join(f'<th style="padding:8px 8px;">{p}</th>' for p in payer_cols)
+        + '<th style="padding:8px 8px;">Overall</th>'
+    )
+
+    body_rows = []
+    body_rows.append(_row("anchor", "Previous market share", _pct_anchor(r.previous_ms), [""] * len(payer_cols)))
+    for code, name, lever in [
         ("L1", "Level 1 - WD", r.wd),
         ("L2", "Level 2 - Rejections", r.rj),
         ("L3", "Level 3 - Reversals", r.rv),
     ]:
-        row = {"Waterfall step": name}
-        for p in _payer_cols:
-            row[p] = _pct(lever.payer_impacts_scaled.get(p, 0.0))
-        row["Overall"] = _pct(lever.overall_impact)
-        rows.append((lever_code, row))
-
+        payer_vals = [_pct(lever.payer_impacts_scaled.get(p, 0.0)) for p in payer_cols]
+        body_rows.append(_row(code, name, _pct(lever.overall_impact), payer_vals))
     if include_other:
-        other_row = {"Waterfall step": "Other reasons"}
-        for p in _payer_cols:
-            other_row[p] = ""
-        other_row["Overall"] = _pct(r.other)
-        rows.append(("other", other_row))
+        body_rows.append(_row("other", "Other reasons", _pct(r.other), [""] * len(payer_cols), italic=True))
+    body_rows.append(_row("anchor", "Current market share", _pct_anchor(r.new_ms), [""] * len(payer_cols)))
 
-    anchor_new = {"Waterfall step": "Current market share"}
-    for p in _payer_cols:
-        anchor_new[p] = ""
-    anchor_new["Overall"] = _pct_anchor(r.new_ms)
-    rows.append(("anchor", anchor_new))
-
-    df = pd.DataFrame([r[1] for r in rows], columns=["Waterfall step"] + _payer_cols + ["Overall"])
-    row_kinds = [r[0] for r in rows]
-
-    def _row_style(row):
-        kind = row_kinds[row.name]
-        if kind == "anchor":
-            return [f"background-color:{_anchor_bg};font-weight:600;color:#0F172A;"] * len(row)
-        if kind == "other":
-            return [f"background-color:{_other_bg};color:#0F172A;font-style:italic;"] * len(row)
-        if kind in _hdr:
-            return [f"background-color:{_hdr[kind]};color:#FFFFFF;font-weight:700;"] * len(row)
-        return [""] * len(row)
-
-    styler = (
-        df.style
-        .apply(_row_style, axis=1)
-        .set_properties(**{
-            "text-align": "center",
-            "font-family": "Inter, sans-serif",
-            "font-size": "0.78rem",
-            "white-space": "nowrap",
-        })
-        .set_table_styles([
-            {"selector": "", "props": "width:100%;table-layout:fixed;border-collapse:collapse;font-size:0.78rem;"},
-            {"selector": "th", "props": "background:#0A1A3D;color:#FFFFFF;font-weight:700;text-align:center;padding:6px 8px;font-size:0.76rem;white-space:nowrap;"},
-            {"selector": "td", "props": "border:1px solid rgba(15,23,42,0.10);padding:5px 8px;white-space:nowrap;"},
-            # Hide the pandas index column across pandas versions
-            {"selector": "th.row_heading, td.row_heading, th.blank", "props": "display:none;"},
-        ])
+    table_html = (
+        '<table style="width:100%;table-layout:auto;border-collapse:collapse;'
+        'font-family:Inter,sans-serif;font-size:0.78rem;border:1px solid rgba(15,23,42,0.10);">'
+        '<thead>'
+        f'<tr style="background:#0A1A3D;color:#FFFFFF;font-weight:700;font-size:0.76rem;'
+        'text-transform:none;">'
+        f'{header_cells}</tr>'
+        '</thead>'
+        f'<tbody>{"".join(body_rows)}</tbody>'
+        '</table>'
     )
-    # Best-effort hide-index for pandas that supports it
-    for _hide in ("hide", "hide_index"):
-        try:
-            method = getattr(styler, _hide, None)
-            if method is None:
-                continue
-            styler = method(axis="index") if _hide == "hide" else method()
-            break
-        except Exception:
-            continue
+
     st.subheader(heading)
     st.caption(caption)
-    try:
-        html = styler.to_html()
-    except Exception:
-        html = df.to_html(index=False, classes="fallback", border=0)
     st.markdown(
-        f"<div style='width:100%;overflow-x:auto;'>{html}</div>",
+        f'<div style="width:100%;overflow-x:auto;">{table_html}</div>',
         unsafe_allow_html=True,
     )
 
