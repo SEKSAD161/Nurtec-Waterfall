@@ -174,7 +174,7 @@ def overall_waterfall(res: WaterfallResult, title: str, include_other: bool = Tr
         labels.append("Other reasons")
         measures.append("relative")
         values.append(res.other)
-    labels.append("New MS")
+    labels.append("Current MS")
     measures.append("total")
     values.append(res.new_ms)
     df = _build_waterfall_df(labels, measures, values)
@@ -182,7 +182,19 @@ def overall_waterfall(res: WaterfallResult, title: str, include_other: bool = Tr
 
     bars = alt.Chart(df).mark_bar(size=44, cornerRadius=4).encode(
         x=alt.X("label:N", sort=alt.EncodingSortField(field="order"), title=None,
-                axis=alt.Axis(labels=False, ticks=True, domain=True, labelPadding=4)),
+                axis=alt.Axis(
+                    labelAngle=0,
+                    labelExpr="indexof(datum.value, ' - ') >= 0 ? split(datum.value, ' - ') : split(datum.value, ' ')",
+                    labelPadding=8,
+                    labelFontSize=11,
+                    labelFontWeight=700,
+                    labelFont="Manrope, Inter, sans-serif",
+                    labelColor=_NAVY_900,
+                    labelLineHeight=13,
+                    labelLimit=200,
+                    ticks=True,
+                    domain=True,
+                )),
         y=alt.Y("start:Q", title="Market Share",
                 axis=alt.Axis(format=".1%"),
                 scale=alt.Scale(zero=False, domain=y_domain, nice=False, clamp=True)),
@@ -201,23 +213,8 @@ def overall_waterfall(res: WaterfallResult, title: str, include_other: bool = Tr
                 scale=alt.Scale(zero=False, domain=y_domain, nice=False, clamp=True)),
         text="text:N",
     )
-    # Two-line x-axis labels: prefix (dark navy, bold) on top, suffix (muted) below.
-    prefix_layer = alt.Chart(df).mark_text(
-        dy=16, fontSize=12, font="Manrope", fontWeight=700, color=_NAVY_900, baseline="top",
-    ).encode(
-        x=alt.X("label:N", sort=alt.EncodingSortField(field="order")),
-        y=alt.datum(y_domain[0]),
-        text="prefix:N",
-    )
-    suffix_layer = alt.Chart(df).mark_text(
-        dy=32, fontSize=10.5, font="Inter", fontWeight=500, color=_MUTED, baseline="top",
-    ).encode(
-        x=alt.X("label:N", sort=alt.EncodingSortField(field="order")),
-        y=alt.datum(y_domain[0]),
-        text="suffix:N",
-    )
-    chart = (bars + text_layer + prefix_layer + suffix_layer).properties(
-        title=title, height=480, width="container",
+    chart = (bars + text_layer).properties(
+        title=title, height=460, width="container",
     )
     return chart
 
@@ -232,7 +229,7 @@ def payer_breakdown_waterfall(res: WaterfallResult, title: str) -> alt.Chart:
             labels.append(f"{name} - {payer}")
             measures.append("relative")
             values.append(lever.payer_impacts_scaled.get(payer, 0.0))
-    labels += ["Other reasons", "New MS"]
+    labels += ["Other reasons", "Current MS"]
     measures += ["relative", "total"]
     values += [res.other, res.new_ms]
 

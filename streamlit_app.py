@@ -41,7 +41,7 @@ def excel_style_table(r: WaterfallResult, include_other: bool = True) -> pd.Data
             rows.append((f"  {payer}", lever.payer_impacts_scaled.get(payer, 0.0) * 100, "%"))
     if include_other:
         rows.append(("Other reasons", r.other * 100, "%"))
-    rows.append(("New market share", r.new_ms * 100, "%"))
+    rows.append(("Current market share", r.new_ms * 100, "%"))
     rows.append(("Total MS difference", r.total_delta * 100, "%"))
 
     df = pd.DataFrame(rows, columns=["Waterfall step", "Contribution", "Unit"])
@@ -743,7 +743,7 @@ if st.session_state.get("view") == "calculations":
 # ---------------- Header KPIs --------------------------------------------
 c1, c2 = st.columns(2)
 c1.metric(f"Previous MS ({prev_qtr})", f"{res.previous_ms*100:.2f}%")
-c2.metric(f"New MS ({curr_qtr})", f"{res.new_ms*100:.2f}%", f"{res.total_delta*100:+.2f}%")
+c2.metric(f"Current MS ({curr_qtr})", f"{res.new_ms*100:.2f}%", f"{res.total_delta*100:+.2f}%")
 
 # ---------------- Tabs ----------------------------------------------------
 tab_npa, tab_laad, tab_qoq = st.tabs(
@@ -794,7 +794,7 @@ def render_payer_split_table(
         other_row["Overall"] = _pct(r.other)
         rows.append(("other", other_row))
 
-    anchor_new = {"Waterfall step": "New market share"}
+    anchor_new = {"Waterfall step": "Current market share"}
     for p in _payer_cols:
         anchor_new[p] = ""
     anchor_new["Overall"] = _pct_anchor(r.new_ms)
@@ -868,7 +868,7 @@ with tab_laad:
         )
         with st.expander("How the numbers relate", expanded=False):
             st.markdown(
-                "- **Previous / New market share**: Nurtec's overall LAAD market share for that quarter.\n"
+                "- **Previous / Current market share**: Nurtec's overall LAAD market share for that quarter.\n"
                 "- **Level 1 / 2 / 3 overall**: what the market share would change by if only that lever moved.\n"
                 "- **Payer columns**: each lever's overall impact split across payer types after payer-mix "
                 "scaling. The four payer values for a level sum (approximately) to the level's Overall value.\n"
