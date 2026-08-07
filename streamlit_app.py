@@ -18,7 +18,7 @@ from src.data import (
     slice_metrics,
 )
 from src.waterfall import build_waterfall, rescale_to_npa, PAYERS, WaterfallResult
-from src.charts import overall_waterfall, payer_breakdown_waterfall, qoq_metric_chart
+from src.charts import overall_waterfall, payer_breakdown_waterfall, qoq_metric_chart, LEVER_COLORS
 from src.qc import build_qc, LeverQCTables
 
 
@@ -825,10 +825,72 @@ with tab_npa:
         c2.metric(f"NPA curr ({curr_qtr})", f"{npa_res.new_ms*100:.2f}%", f"{npa_res.total_delta*100:+.2f}%")
         c3.metric("LAAD to NPA factor", f"{npa_res.debug['laad_to_npa_factor']:.2f}")
 
-        st.altair_chart(
-            overall_waterfall(npa_res, f"{claim_type} NPA-scaled waterfall -- {prev_qtr} to {curr_qtr}", include_other=False),
-            use_container_width=True,
-        )
+        _npa_chart_col, _npa_table_col = st.columns([1, 1], gap="medium")
+        with _npa_chart_col:
+            st.altair_chart(
+                overall_waterfall(npa_res, f"{claim_type} NPA-scaled waterfall -- {prev_qtr} to {curr_qtr}", include_other=False),
+                use_container_width=True,
+            )
+        with _npa_table_col:
+            st.subheader("Waterfall breakdown")
+            st.caption(f"NPA-scaled -- {claim_type}, {prev_qtr} \u2192 {curr_qtr}")
+
+            # Colors mirror the chart bars (LEVER_COLORS from charts.py)
+            _hdr = {"L1": LEVER_COLORS["L1"], "L2": LEVER_COLORS["L2"], "L3": LEVER_COLORS["L3"]}
+            _sub = {"L1": "#DBEAFE", "L2": "#DCFCE7", "L3": "#FED7AA"}
+            _anchor_bg = "#F1F5F9"
+
+            def _pct2(x, signed=False):
+                if x is None:
+                    return ""
+                return f"{x*100:+.2f}%" if signed else f"{x*100:.2f}%"
+
+            payer_order = list(PAYERS)  # Commercial, Medicaid, Medicare, Others
+            npa_rows = []
+            npa_rows.append(("anchor", "Previous market share", _pct2(npa_res.previous_ms)))
+            for lever_code, lever_name, lever_obj in [
+                ("L1", "Level 1 - WD", npa_res.wd),
+                ("L2", "Level 2 - Rejections", npa_res.rj),
+                ("L3", "Level 3 - Reversals", npa_res.rv),
+            ]:
+                npa_rows.append((lever_code + "_hdr", lever_name, _pct2(lever_obj.overall_impact, signed=True)))
+                for i, payer in enumerate(payer_order, start=1):
+                    npa_rows.append((
+                        lever_code + "_sub",
+                        f"{lever_code}.{i} - {payer}",
+                        _pct2(lever_obj.payer_impacts_scaled.get(payer, 0.0), signed=True),
+                    ))
+            npa_rows.append(("anchor", "New market share", _pct2(npa_res.new_ms)))
+
+            df_npa_break = pd.DataFrame(
+                [(r[1], r[2]) for r in npa_rows],
+                columns=["Waterfall step", "Value"],
+            )
+            row_kinds = [r[0] for r in npa_rows]
+
+            def _row_style(row):
+                kind = row_kinds[row.name]
+                if kind == "anchor":
+                    return [f"background-color:{_anchor_bg};font-weight:600;color:#0F172A;"] * len(row)
+                if kind.endswith("_hdr"):
+                    code = kind.split("_")[0]
+                    return [f"background-color:{_hdr[code]};font-weight:700;color:#FFFFFF;"] * len(row)
+                if kind.endswith("_sub"):
+                    code = kind.split("_")[0]
+                    return [f"background-color:{_sub[code]};color:#0F172A;"] * len(row)
+                return [""] * len(row)
+
+            styled = (
+                df_npa_break.style
+                .apply(_row_style, axis=1)
+                .set_properties(**{"text-align": "center", "font-family": "Inter, sans-serif"})
+                .set_table_styles([
+                    {"selector": "th", "props": "background:#0A1A3D;color:#FFFFFF;font-weight:700;text-align:center;"},
+                    {"selector": "td", "props": "border:1px solid rgba(15,23,42,0.10);padding:6px 10px;"},
+                ])
+                .hide(axis="index")
+            )
+            st.markdown(styled.to_html(), unsafe_allow_html=True)
 
 with tab_qoq:
     # Metric label -> raw METRIC value in the LAAD table

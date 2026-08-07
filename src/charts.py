@@ -20,6 +20,30 @@ _LEVEL    = "#41B6E6"
 _MUTED    = "#475569"
 _GRID     = "rgba(15,23,42,0.06)"
 
+# Lever palette shared with the payer split table (streamlit_app.py mirrors these)
+LEVER_COLORS = {
+    "L1":     "#3B82F6",   # blue - Written Demand
+    "L2":     "#22C55E",   # green - Rejections
+    "L3":     "#F97316",   # orange - Reversals
+    "anchor": "#94A3B8",   # slate - Previous / New market share
+    "other":  "#94A3B8",   # slate - Other reasons
+}
+
+
+def _lever_color(label: str, measure: str) -> str:
+    if measure in ("absolute", "total"):
+        return LEVER_COLORS["anchor"]
+    lower = label.lower()
+    if "wd" in lower or "written" in lower or lower.startswith("level 1") or lower.startswith("l1"):
+        return LEVER_COLORS["L1"]
+    if "rejection" in lower or lower.startswith("level 2") or lower.startswith("l2"):
+        return LEVER_COLORS["L2"]
+    if "reversal" in lower or lower.startswith("level 3") or lower.startswith("l3"):
+        return LEVER_COLORS["L3"]
+    if "other" in lower:
+        return LEVER_COLORS["other"]
+    return _GAIN
+
 
 def _pchub_theme() -> dict:
     return {
@@ -85,11 +109,7 @@ def _build_waterfall_df(labels: list, measures: list, values: list) -> pd.DataFr
             start = running
             end = running + value
             running = end
-        color = (
-            _LEVEL if measure in ("absolute", "total")
-            else _GAIN if value >= 0
-            else _LOSS
-        )
+        color = _lever_color(label, measure)
         text = (
             f"{value*100:.2f}%"
             if measure in ("absolute", "total")
