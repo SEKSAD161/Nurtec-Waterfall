@@ -167,7 +167,7 @@ def overall_waterfall(res: WaterfallResult, title: str, include_other: bool = Tr
 
     bars = alt.Chart(df).mark_bar(size=44, cornerRadius=4).encode(
         x=alt.X("label:N", sort=alt.EncodingSortField(field="order"), title=None,
-                axis=alt.Axis(labelAngle=-25, labelLimit=200)),
+                axis=alt.Axis(labelAngle=-30, labelLimit=400, labelPadding=6, labelFontSize=11)),
         y=alt.Y("start:Q", title="Market Share",
                 axis=alt.Axis(format=".1%"),
                 scale=alt.Scale(zero=False, domain=y_domain, nice=False, clamp=True)),
@@ -186,7 +186,7 @@ def overall_waterfall(res: WaterfallResult, title: str, include_other: bool = Tr
                 scale=alt.Scale(zero=False, domain=y_domain, nice=False, clamp=True)),
         text="text:N",
     )
-    chart = (bars + text_layer).properties(title=title, height=440, width="container")
+    chart = (bars + text_layer).properties(title=title, height=460, width="container")
     return chart
 
 

@@ -816,11 +816,16 @@ def render_payer_split_table(
     styler = (
         df.style
         .apply(_row_style, axis=1)
-        .set_properties(**{"text-align": "center", "font-family": "Inter, sans-serif"})
+        .set_properties(**{
+            "text-align": "center",
+            "font-family": "Inter, sans-serif",
+            "font-size": "0.78rem",
+            "white-space": "nowrap",
+        })
         .set_table_styles([
-            {"selector": "", "props": "width:100%;table-layout:fixed;border-collapse:collapse;"},
-            {"selector": "th", "props": "background:#0A1A3D;color:#FFFFFF;font-weight:700;text-align:center;padding:8px 10px;"},
-            {"selector": "td", "props": "border:1px solid rgba(15,23,42,0.10);padding:6px 10px;"},
+            {"selector": "", "props": "width:100%;table-layout:fixed;border-collapse:collapse;font-size:0.78rem;"},
+            {"selector": "th", "props": "background:#0A1A3D;color:#FFFFFF;font-weight:700;text-align:center;padding:6px 8px;font-size:0.76rem;white-space:nowrap;"},
+            {"selector": "td", "props": "border:1px solid rgba(15,23,42,0.10);padding:5px 8px;white-space:nowrap;"},
             # Hide the pandas index column across pandas versions
             {"selector": "th.row_heading, td.row_heading, th.blank", "props": "display:none;"},
         ])
