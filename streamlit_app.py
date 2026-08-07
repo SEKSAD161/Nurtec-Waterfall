@@ -885,12 +885,16 @@ with tab_npa:
                 .apply(_row_style, axis=1)
                 .set_properties(**{"text-align": "center", "font-family": "Inter, sans-serif"})
                 .set_table_styles([
-                    {"selector": "th", "props": "background:#0A1A3D;color:#FFFFFF;font-weight:700;text-align:center;"},
+                    {"selector": "", "props": "width:100%;table-layout:fixed;border-collapse:collapse;"},
+                    {"selector": "th", "props": "background:#0A1A3D;color:#FFFFFF;font-weight:700;text-align:center;padding:8px 10px;"},
                     {"selector": "td", "props": "border:1px solid rgba(15,23,42,0.10);padding:6px 10px;"},
                 ])
                 .hide(axis="index")
             )
-            st.markdown(styled.to_html(), unsafe_allow_html=True)
+            st.markdown(
+                f"<div style='width:100%;overflow-x:auto;'>{styled.to_html()}</div>",
+                unsafe_allow_html=True,
+            )
 
 with tab_qoq:
     # Metric label -> raw METRIC value in the LAAD table
