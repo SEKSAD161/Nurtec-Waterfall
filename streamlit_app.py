@@ -603,7 +603,13 @@ with st.sidebar:
         st.stop()
 
     prev_qtr = st.selectbox("Previous quarter", qtrs, index=max(0, len(qtrs) - 3))
-    curr_qtr = st.selectbox("Current quarter", qtrs, index=len(qtrs) - 1)
+    # Current quarter must be strictly after Previous quarter
+    _prev_idx = qtrs.index(prev_qtr)
+    curr_options = qtrs[_prev_idx + 1:]
+    if not curr_options:
+        st.warning("Pick an earlier Previous quarter -- no later quarter available.")
+        st.stop()
+    curr_qtr = st.selectbox("Current quarter", curr_options, index=len(curr_options) - 1)
 
     st.markdown("<div style='margin-top:1rem'></div>", unsafe_allow_html=True)
     if st.button(
@@ -622,10 +628,6 @@ with st.sidebar:
     ):
         st.session_state["view"] = "calculations"
         st.rerun()
-
-    if prev_qtr == curr_qtr:
-        st.warning("Pick two different quarters.")
-        st.stop()
 
 # ---------------- Business Rules view (early return) ---------------------
 if st.session_state.get("view") == "business_rules":
